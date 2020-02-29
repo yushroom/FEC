@@ -1,0 +1,21 @@
+[submodule "engine/source/thirdparty/QuickJS"]
+	path = engine/source/thirdparty/QuickJS
+	url = https://github.com/yushroom/QuickJS.git
+[submodule "engine/source/thirdparty/glfw"]
+	path = engine/source/thirdparty/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "engine/source/thirdparty/imgui"]
+	path = engine/source/thirdparty/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "engine/source/thirdparty/rapidjson"]
+	path = engine/source/thirdparty/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
+[submodule "engine/source/thirdparty/DirectXShaderCompiler"]
+	path = engine/source/thirdparty/DirectXShaderCompiler
+	url = https://github.com/microsoft/DirectXShaderCompiler.git
+[submodule "engine/source/thirdparty/SPIRV-Cross"]
+	path = engine/source/thirdparty/SPIRV-Cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "engine/source/thirdparty/nvidia-texture-tools"]
+	path = engine/source/thirdparty/nvidia-texture-tools
+	url = https://github.com/yushroom/nvidia-texture-tools.git

@@ -1,0 +1,8 @@
+﻿engine/build/Engine
+__pycache__
+engine/build/thirdparty
+engine/source/codegen/classes.json
+engine/source/codegen/jsbinding.gen.cpp
+engine/source/codegen/parser.out
+engine/source/codegen/parsetab.py
+temp

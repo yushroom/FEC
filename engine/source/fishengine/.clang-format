@@ -1,0 +1,7 @@
+BasedOnStyle: google
+IndentWidth: 4
+# TabWidth: 4
+# UseTab: Never
+# AlignConsecutiveDeclarations: true
+# AlignConsecutiveAssignments: true
+# AlignTrailingComments: true

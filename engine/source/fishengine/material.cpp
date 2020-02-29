@@ -1,9 +1,9 @@
 #include "material.h"
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 #include "asset.h"
 #include "shader.h"

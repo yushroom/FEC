@@ -1,4 +1,5 @@
 #include "array.h"
+
 #include <string.h>
 
 #if WIN32
@@ -8,6 +9,8 @@
 #ifndef aligned_free
 #define aligned_free _aligned_free
 #endif
+#else
+#define aligned_free free
 #endif
 
 void array_init(array *a, uint32_t stride, uint32_t capacity) {

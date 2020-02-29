@@ -19,7 +19,7 @@ typedef struct {
 } float3;
 
 #define float3_forward \
-    (float3) {0, 0, -1}
+    (float3) { 0, 0, -1 }
 #define float3_up \
     (float3) { 0, 1, 0 }
 #define float3_right \
@@ -28,14 +28,13 @@ typedef struct {
 #if __clang__
 typedef __attribute__((ext_vector_type(4))) float float4;
 #else
-typedef __declspec(align(16)) struct {
-    float x, y, z, w;
-} float4;
+typedef __declspec(align(16)) struct { float x, y, z, w; } float4;
 #endif
 
 typedef float4 quat;
 
-#define float4_zero (float4){0, 0, 0, 0}
+#define float4_zero \
+    (float4) { 0, 0, 0, 0 }
 
 static inline float3 float4_to_float3(float4 v) {
     float3 r = {v.x, v.y, v.z};
@@ -455,7 +454,7 @@ static inline quat float4x4_to_quat(const float4x4 *m) {
             result.y = biggestVal;
             result.z = (m->m21 + m->m12) * mult;
             break;
-        default:    // 3
+        default:  // 3
             result.w = (m->m10 - m->m01) * mult;
             result.x = (m->m02 + m->m20) * mult;
             result.y = (m->m21 + m->m12) * mult;

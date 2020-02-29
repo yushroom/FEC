@@ -67,12 +67,10 @@ add_library(mikktspace
 target_include_directories(mikktspace PUBLIC ${MIKKTSPACE_ROOT_DIR})
 set_target_properties(mikktspace PROPERTIES FOLDER "ThirdParty")
 
-set(QUICKJS_ROOT_DIR "QuickJS")
+set(QUICKJS_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/QuickJS")
 add_library(quickjs
     ${QUICKJS_ROOT_DIR}/cutils.c
     ${QUICKJS_ROOT_DIR}/cutils.h
-    #${QUICKJS_ROOT_DIR}/libbf.c
-    #${QUICKJS_ROOT_DIR}/libbf.h
     ${QUICKJS_ROOT_DIR}/libregexp.c
     ${QUICKJS_ROOT_DIR}/libregexp.h
     ${QUICKJS_ROOT_DIR}/libunicode.c
@@ -92,7 +90,10 @@ target_compile_definitions(quickjs PUBLIC _GNU_SOURCE)
 target_compile_features(quickjs PUBLIC c_std_11)
 set_target_properties(quickjs PROPERTIES FOLDER "ThirdParty")
 if (WIN32)
-target_compile_definitions(quickjs PUBLIC _CRT_SECURE_NO_WARNINGS EMSCRIPTEN)
+    target_compile_definitions(quickjs PUBLIC _CRT_SECURE_NO_WARNINGS EMSCRIPTEN)
 else ()
-target_compile_definitions(quickjs PUBLIC CONFIG_BIGNUM)
+    target_sources(quickjs PRIVATE
+        ${QUICKJS_ROOT_DIR}/libbf.c
+        ${QUICKJS_ROOT_DIR}/libbf.h)
+    target_compile_definitions(quickjs PUBLIC CONFIG_BIGNUM)
 endif ()

@@ -562,7 +562,8 @@ int SimpleDraw(Transform *t, struct Renderable *r) {
     World *w = defaultWorld;
     Camera *camera = CameraGetMainCamera(w);
     Entity cameraEntity = ComponentGetEntity(w, camera, CameraID);
-    TransformManager *tm = (TransformManager *)WorldGetSingletonComponent(w, TransformManagerID);
+    SingletonTransformManager *tm =
+        (SingletonTransformManager *)WorldGetSingletonComponent(w, SingletonTransformManagerID);
 
     uint32_t tindex = WorldGetComponentIndex(w, t, TransformID);
 

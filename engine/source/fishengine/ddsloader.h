@@ -1,8 +1,8 @@
 #ifndef DDSLOADER_H
 #define DDSLOADER_H
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef struct {
     uint32_t width;

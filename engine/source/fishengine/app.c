@@ -33,6 +33,8 @@
 #ifndef aligned_free
 #define aligned_free _aligned_free
 #endif
+#else
+#define aligned_free free
 #endif
 
 void RenderSystem(World *w) {
@@ -301,7 +303,7 @@ static char *js_module_normalize_name(JSContext *ctx, const char *base_name,
 
     /* we only normalize the leading '..' or '.' */
     r = name;
-    //for (;;) {
+    // for (;;) {
     //    if (r[0] == '.' && (r[1] == _SEP || r[1] == '/')) {
     //        r += 2;
     //    } else if (r[0] == '.' && r[1] == '.' &&
@@ -361,7 +363,7 @@ int app_init() {
     WorldAddSystem(w, RenderSystem);
     SingletonTransformManager *tm;
     {
-        //tm = aligned_alloc(16, sizeof(TransformManager));
+        // tm = aligned_alloc(16, sizeof(TransformManager));
         tm = malloc(sizeof(SingletonTransformManager));
         TransformManagerInit(tm);
         WorldAddSingletonComponent(w, tm, SingletonTransformManagerID);

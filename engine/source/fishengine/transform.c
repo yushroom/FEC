@@ -1,6 +1,7 @@
 #include "transform.h"
 
-static void TransformPrintHierarchyNode(SingletonTransformManager *t, int n, int depth) {
+static void TransformPrintHierarchyNode(SingletonTransformManager *t, int n,
+                                        int depth) {
     for (int i = 0; i < depth; ++i) {
         putchar(' ');
     }
@@ -21,7 +22,8 @@ void TransformPrintHierarchy(SingletonTransformManager *t) {
     puts("]");
 }
 
-float3 TransformGetPosition(SingletonTransformManager *tm, World *w, uint32_t idx) {
+float3 TransformGetPosition(SingletonTransformManager *tm, World *w,
+                            uint32_t idx) {
     Transform *t = WorldGetComponentAt(w, TransformID, idx);
     float3 pos = t->localPosition;
     uint32_t p = TransformGetParent(tm, idx);
@@ -34,7 +36,8 @@ float3 TransformGetPosition(SingletonTransformManager *tm, World *w, uint32_t id
     return pos;
 }
 
-float3 TransformGetForward(SingletonTransformManager *tm, World *w, uint32_t idx) {
+float3 TransformGetForward(SingletonTransformManager *tm, World *w,
+                           uint32_t idx) {
     float3 forward = float3_forward;
     float4x4 l2w = TransformGetLocalToWorldMatrix(tm, w, idx);
     forward = float4x4_mul_vector(&l2w, forward);

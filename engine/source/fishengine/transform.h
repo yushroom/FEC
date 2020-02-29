@@ -75,7 +75,8 @@ static inline Transform *TransformGet(World *w, uint32_t idx) {
     return (Transform *)WorldGetComponentAt(w, TransformID, idx);
 }
 
-static inline void TransformSetDirty(SingletonTransformManager *tm, uint32_t idx) {
+static inline void TransformSetDirty(SingletonTransformManager *tm,
+                                     uint32_t idx) {
     tm->modified++;
     tm->H[idx].modified = tm->modified;
     tm->H[idx].localNotDirty = false;
@@ -88,8 +89,8 @@ static inline uint32_t TransformGetParent(SingletonTransformManager *tm,
     return tm->H[child].parent;
 }
 
-static inline void TransformSetParent(SingletonTransformManager *tm, uint32_t child,
-                                      uint32_t newParent) {
+static inline void TransformSetParent(SingletonTransformManager *tm,
+                                      uint32_t child, uint32_t newParent) {
     uint32_t parent = tm->H[child].parent;
     if (parent == newParent) return;
 
@@ -111,8 +112,8 @@ static inline void TransformSetParent(SingletonTransformManager *tm, uint32_t ch
     TransformSetDirty(tm, child);
 }
 
-static inline void TransformUpdateLocalToWorldMatrix(SingletonTransformManager *tm,
-                                                     World *w, uint32_t idx) {
+static inline void TransformUpdateLocalToWorldMatrix(
+    SingletonTransformManager *tm, World *w, uint32_t idx) {
     float4x4 *l2w = &tm->LocalToWorld[idx];
     Transform *t = TransformGet(w, idx);
     uint32_t parent = TransformGetParent(tm, idx);
@@ -138,14 +139,16 @@ static inline void TransformUpdateLocalToWorldMatrix(SingletonTransformManager *
     tm->H[idx].localNotDirty = true;
 }
 
-static inline float4x4 TransformGetLocalToWorldMatrix(SingletonTransformManager *tm,
-                                                      World *w, uint32_t idx) {
+static inline float4x4 TransformGetLocalToWorldMatrix(
+    SingletonTransformManager *tm, World *w, uint32_t idx) {
     TransformUpdateLocalToWorldMatrix(tm, w, idx);
     return tm->LocalToWorld[idx];
 }
 
-float3 TransformGetPosition(SingletonTransformManager *tm, World *w, uint32_t idx);
-float3 TransformGetForward(SingletonTransformManager *tm, World *w, uint32_t idx);
+float3 TransformGetPosition(SingletonTransformManager *tm, World *w,
+                            uint32_t idx);
+float3 TransformGetForward(SingletonTransformManager *tm, World *w,
+                           uint32_t idx);
 float3 TransformGetUp(SingletonTransformManager *tm, World *w, uint32_t idx);
 
 void TransformPrintHierarchy(SingletonTransformManager *t);

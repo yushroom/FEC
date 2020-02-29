@@ -1,3 +1,5 @@
+#include "app.h"
+
 #include <imgui.h>
 #include <quickjs.h>
 
@@ -10,7 +12,6 @@
 #include "renderable.h"
 #include "statistics.h"
 #include "transform.h"
-#include "app.h"
 
 extern "C" {
 void hierarchy(World *w);
@@ -98,7 +99,8 @@ void RenderFrame2(ImVec2 p_min, ImVec2 p_max, ImU32 fill_col, bool border,
 }
 
 bool ButtonEx2(const char *label, const ImVec2 &size_arg,
-               ImGuiButtonFlags flags, ImDrawCornerFlags corner_flags, bool active) {
+               ImGuiButtonFlags flags, ImDrawCornerFlags corner_flags,
+               bool active) {
     ImGuiWindow *window = GetCurrentWindow();
     if (window->SkipItems) return false;
 
@@ -130,9 +132,10 @@ bool ButtonEx2(const char *label, const ImVec2 &size_arg,
     bool pressed = ButtonBehavior(bb, id, &hovered, &held, flags);
 
     // Render
-    const ImU32 col = GetColorU32(
-        (active || (held && hovered)) ? ImGuiCol_ButtonActive
-                          : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+    const ImU32 col =
+        GetColorU32((active || (held && hovered))
+                        ? ImGuiCol_ButtonActive
+                        : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
     RenderNavHighlight(bb, id);
     RenderFrame2(bb.Min, bb.Max, col, true, 4.0f, corner_flags);
     RenderTextClipped(bb.Min + style.FramePadding, bb.Max - style.FramePadding,
@@ -194,8 +197,10 @@ void toolbar(World *world) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(-1, 2));
         if (ImGui::Button2("play", ImVec2(sw, sh), ImDrawCornerFlags_Left,
                            app_is_playing())) {
-            if (app_is_playing()) app_stop();
-            else app_play();
+            if (app_is_playing())
+                app_stop();
+            else
+                app_play();
         }
         ImGui::SameLine(0);
         if (ImGui::Button2("pause", ImVec2(sw, sh), ImDrawCornerFlags_None,
@@ -226,7 +231,8 @@ void inspector(World *w) {
 
     if (selectedEntity != 0 && selectedEntity < w->entityCount) {
         ImGui::Text("Transform");
-        SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(
+        SingletonTransformManager *tm =
+            (SingletonTransformManager *)WorldGetSingletonComponent(
                 w, SingletonTransformManagerID);
         Transform *t = TransformGet(w, selectedEntity);
         uint32_t idx = WorldGetComponentIndex(w, t, TransformID);

@@ -1,9 +1,10 @@
 #include "mesh.h"
 
+#include <stddef.h>
+
 #include "asset.h"
 #include "rhi.h"
 #include "statistics.h"
-#include <stddef.h>
 
 Skin *SkinNew() {
     Skin *s = (Skin *)malloc(sizeof(Skin));

@@ -19,3 +19,6 @@
 [submodule "engine/source/thirdparty/nvidia-texture-tools"]
 	path = engine/source/thirdparty/nvidia-texture-tools
 	url = https://github.com/yushroom/nvidia-texture-tools.git
+[submodule "engine/source/thirdparty/fsevents"]
+	path = engine/source/thirdparty/fsevents
+	url = https://github.com/fsevents/fsevents.git

@@ -3,29 +3,47 @@
 
 #include "transform.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Memory {
     void *buffer;
     size_t byteLength;
 };
 typedef struct Memory Memory;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 static inline Memory MemoryMake(void *buffer, size_t byteLength) {
     Memory m = {.buffer = buffer, .byteLength = byteLength};
     return m;
 }
 
-uint32_t CreateBuffer(Memory memory);
+enum GPUResourceUsage {
+    GPUResourceUsageNone = 0,
+    GPUResourceUsageVertexBuffer = GPUResourceUsageNone,
+    GPUResourceUsageIndexBuffer = GPUResourceUsageNone,
+    GPUResourceUsageShaderResource = 0x1,
+    GPUResourceUsageRenderTarget = 0x2,
+    GPUResourceUsageDepthStencil = 0x4,
+    GPUResourceUsageUnorderedAccess = 0x8 | GPUResourceUsageShaderResource,
+};
+
+typedef int GPUResourceUsageFlags;
+
+typedef uint32_t BufferHandle;
+typedef uint32_t ShaderHandle;
+
+// set memory.buffer = NULL if you want to create an empty buffer
+BufferHandle CreateBuffer(Memory memory, GPUResourceUsageFlags usage);
+void UpdateBuffer(BufferHandle handle, Memory memory);
 uint32_t CreateTexture(uint32_t width, uint32_t height, uint32_t mipmaps,
                        Memory memory);
-void DeleteBuffer(uint32_t bufferID);
+void DeleteBuffer(BufferHandle handle);
 void DeleteTexture(uint32_t textureID);
 
-uint32_t CreateShader(const char *path, const char *vs_name,
+ShaderHandle CreateShader(const char *path, const char *vs_name,
                       const char *ps_name);
+//ShaderHandle CreateShaderFromCompiledFile(const char *path);
 void DeleteShader(uint32_t shaderID);
 
 struct Renderable;

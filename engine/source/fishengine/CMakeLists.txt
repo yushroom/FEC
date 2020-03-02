@@ -23,14 +23,13 @@ add_library(FishEngine
     
     animation.h animation.c
     ddsloader.h ddsloader.c
-
-    imgui_extra.hpp imgui_extra.cpp
 )
 target_compile_features(FishEngine PUBLIC cxx_std_17)
 target_compile_features(FishEngine PUBLIC c_std_11)
-target_link_libraries(FishEngine PUBLIC imgui glfw quickjs mikktspace)
+target_link_libraries(FishEngine PUBLIC imgui glfw quickjs mikktspace fmt)
 target_compile_options(FishEngine PUBLIC "-march=native")
-target_include_directories(FishEngine PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../thirdparty/rapidjson/include")
+target_include_directories(FishEngine PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../thirdparty/rapidjson/include")
+target_include_directories(FishEngine PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
 if (APPLE)
     target_link_libraries(FishEngine PUBLIC fsevents)
 endif ()
@@ -48,7 +47,7 @@ if (WIN32)
     add_library(FishEngine_d3d12
         render_d3d12.hpp render_d3d12.cpp
     )
-    target_link_libraries(FishEngine_d3d12 PUBLIC FishEngine)
+    target_link_libraries(FishEngine_d3d12 PUBLIC FishEngine DirectXTK12 DirectXTex)
     target_link_libraries(FishEngine_d3d12 PUBLIC d3d12 dxgi)
 endif ()
 
@@ -63,6 +62,8 @@ if (APPLE)
 else ()
     add_executable(glTFViewer main.cpp)
 endif ()
+
+target_link_libraries(glTFViewer PUBLIC FishEditor)
 
 if (APPLE)
     target_link_libraries(glTFViewer PUBLIC FishEngine_macos imgui_macos)

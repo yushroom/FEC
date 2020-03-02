@@ -22,3 +22,12 @@
 [submodule "engine/source/thirdparty/fsevents"]
 	path = engine/source/thirdparty/fsevents
 	url = https://github.com/fsevents/fsevents.git
+[submodule "engine/source/thirdparty/DirectXTK12"]
+	path = engine/source/thirdparty/DirectXTK12
+	url = https://github.com/microsoft/DirectXTK12.git
+[submodule "engine/source/thirdparty/DirectXTex"]
+	path = engine/source/thirdparty/DirectXTex
+	url = https://github.com/microsoft/DirectXTex.git
+[submodule "engine/source/thirdparty/fmt"]
+	path = engine/source/thirdparty/fmt
+	url = https://github.com/fmtlib/fmt.git

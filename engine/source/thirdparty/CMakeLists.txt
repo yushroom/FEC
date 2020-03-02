@@ -31,6 +31,9 @@ target_compile_options(imgui_macos PUBLIC "-fobjc-arc")
 set_target_properties(imgui_macos PROPERTIES FOLDER "ThirdParty")
 endif ()
 
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/fmt)
+set_target_properties(fmt PROPERTIES FOLDER "ThirdParty")
+
 if (WIN32)
 add_library(imgui_win
     ${IMGUI_DIR}/examples/imgui_impl_glfw.h
@@ -97,3 +100,17 @@ else ()
         ${QUICKJS_ROOT_DIR}/libbf.h)
     target_compile_definitions(quickjs PUBLIC CONFIG_BIGNUM)
 endif ()
+
+if (WIN32)
+    set(BUILD_XAUDIO_WIN10 OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/DirectXTK12)
+    set_target_properties(DirectXTK12 PROPERTIES FOLDER "ThirdParty")
+
+    set(BUILD_DX11 OFF CACHE BOOL "" FORCE)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/DirectXTex)
+    set_target_properties(DirectXTex PROPERTIES FOLDER "ThirdParty/DirectXTex")
+    set_target_properties(texassemble PROPERTIES FOLDER "ThirdParty/DirectXTex")
+    set_target_properties(texconv PROPERTIES FOLDER "ThirdParty/DirectXTex")
+    set_target_properties(texdiag PROPERTIES FOLDER "ThirdParty/DirectXTex")
+    set_target_properties(texconv PROPERTIES FOLDER "ThirdParty/DirectXTex")
+endif (WIN32)

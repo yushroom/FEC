@@ -14,6 +14,7 @@ struct ShaderReflectCBType {
         uint32_t offset = 0;
 
         uint32_t bytes = 0;
+        bool used = true;
     };
 
     std::string name;

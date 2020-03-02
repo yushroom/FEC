@@ -163,7 +163,7 @@ void MeshUploadMeshData(Mesh *m) {
     if (m->triangles.size != 0) {
         Memory memory = {.buffer = m->triangles.ptr,
                          .byteLength = array_get_bytelength(&m->triangles)};
-        m->ib = CreateBuffer(memory);
+        m->ib = CreateBuffer(memory, GPUResourceUsageIndexBuffer);
     }
     if (m->vertices.size != 0) {
         if (!(m->attributes & (1 << VertexAttrNormal))) {
@@ -174,12 +174,12 @@ void MeshUploadMeshData(Mesh *m) {
         //		}
         Memory memory = {.buffer = m->vertices.ptr,
                          .byteLength = array_get_bytelength(&m->vertices)};
-        m->vb = CreateBuffer(memory);
+        m->vb = CreateBuffer(memory, GPUResourceUsageVertexBuffer);
     }
     if (m->boneWeights.size != 0) {
         Memory memory = {.buffer = m->boneWeights.ptr,
                          .byteLength = array_get_bytelength(&m->boneWeights)};
-        m->sb = CreateBuffer(memory);
+        m->sb = CreateBuffer(memory, GPUResourceUsageVertexBuffer);
     }
 }
 

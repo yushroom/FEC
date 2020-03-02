@@ -9,8 +9,6 @@
 extern "C" {
 #endif
 
-typedef uint32_t ShaderID;
-
 enum ShaderPropertyType {
     // ShaderPropertyTypeUnknown,
     ShaderPropertyTypeColor,
@@ -20,8 +18,17 @@ enum ShaderPropertyType {
     ShaderPropertyTypeTexture,
 };
 
+enum ShaderType {
+    ShaderTypeVertex = 0,
+    ShaderTypePixel,
+    ShaderTypeCompute,
+    ShaderTypeGeometry,
+    ShaderTypeHull,
+    ShaderTypeDomain,
+};
+
 struct Shader {
-    ShaderID handle;
+    ShaderHandle handle;
     char name[32];
     void *reflect;
 };

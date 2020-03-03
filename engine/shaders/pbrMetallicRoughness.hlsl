@@ -1,5 +1,4 @@
 // adapted from https://github.com/KhronosGroup/glTF-WebGL-PBR/blob/master/shaders/pbr-frag.glsl
-//keyword HAS_OCCLUSIONMAP 0
 #include <AppData.hlsl>
 #include <ShaderVariables.hlsl>
 #include <Common.hlsl>
@@ -74,7 +73,7 @@ float3 emissiveFactor;
 #endif
 
 #if ALPHA_TEST
-float alphaCutoff;
+    float alphaCutoff;
 #endif
 
 

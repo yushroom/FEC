@@ -312,7 +312,8 @@ def p_function_param(p):
 
 
 def p_type_dec(p):
-    '''type_dec : type_pointer_dec
+    '''type_dec : IDENT
+        | type_pointer_dec
         | type_enum
         | type_internal_dec
     '''

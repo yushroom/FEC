@@ -10,6 +10,7 @@
 
 #include "ecs.h"
 #include "simd_math.h"
+#include "transform.h"
 
 typedef const char *string;
 
@@ -118,6 +119,16 @@ inline int JSValueTo<float4>(JSContext *ctx, float4 *v, JSValue val) {
     ret = ret || JSValueTo<float>(ctx, &z, JS_GetPropertyUint32(ctx, val, 2));
     ret = ret || JSValueTo<float>(ctx, &w, JS_GetPropertyUint32(ctx, val, 3));
     if (!ret) *v = float4_make(x, y, z, w);
+    return ret;
+}
+
+template <>
+inline int JSValueTo<float4x4>(JSContext *ctx, float4x4 *v, JSValue val) {
+    int ret = 0;
+    if (!JS_IsArray(ctx, val)) return 1;
+    for (int i = 0; i < 16; ++i)
+        ret = ret || JSValueTo<float>(ctx, &v->a[i],
+                                      JS_GetPropertyUint32(ctx, val, i));
     return ret;
 }
 

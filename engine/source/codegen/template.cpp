@@ -1,27 +1,92 @@
 #include "jsbinding.hpp"
 #include "animation.h"
-// class Transform {
-//     Transform *parent {
-//         getter {{
-//             value = TransfromGetParent(self);
-//         }}
-//     }
-//     float3 localPosition {
-//         getter {{
-//             // JSValue value;
-//             value = js_fe_make_float3(ctx, self->position);
-//         }}
-//         setter {{
-//             // float3 value;
-//             self->position = value;
-//             TransformSetDirty(self);
-//         }}
-//     }
-//     quat localRotation;
-//     float3 localScale;
-//     float3 position;
-//     float4x4 localMatrix;
-// };
+ class Transform {
+     Transform *parent {
+         getter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            uint32_t p = TransformGetParent(tm, index);
+            if (p == 0) return JS_NULL;
+            value = (Transform *)array_at(&a->m, p);
+         }}
+         setter {{
+            SingletonTransformManager* tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray* a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            uint32_t parent = array_get_index(&a->m, value);
+            const uint32_t child = index;
+            TransformSetParent(tm, child, parent);
+        }}
+     }
+     float3 localPosition {
+         getter;
+         setter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            self->localPosition = value;
+            TransformSetDirty(tm, index);
+         }}
+     }
+     quat localRotation {
+         getter;
+         setter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            self->localRotation = value;
+            TransformSetDirty(tm, index);
+         }}
+     }
+     float3 localEulerAngles {
+         getter {{
+            value = quat_to_euler(self->localRotation);
+         }}
+         setter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            self->localRotation = euler_to_quat(value);
+            TransformSetDirty(tm, index);
+         }}
+     }
+     float3 localScale {
+         getter;
+         setter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            self->localScale = value;
+            TransformSetDirty(tm, index);
+         }}
+     }
+     float3 position {
+         getter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(
+                defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            value = TransformGetPosition(tm, defaultWorld, index);
+         }}
+     }
+     float4x4 localMatrix {
+         setter {{
+            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+            uint32_t index = array_get_index(&a->m, self);
+            float4x4_decompose(&value, &self->localPosition, &self->localRotation,
+                               &self->localScale);
+            TransformSetDirty(tm, index);
+         }}
+     }
+     void LookAt(float3 target) {{
+        SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
+        ComponentArray *a = &defaultWorld->componentArrays[TransformID];
+        uint32_t index = array_get_index(&a->m, self);
+        TransformLookAt(tm, defaultWorld, index, target);
+     }}
+ };
 
 // class _Entity {
 //     string name;
@@ -42,11 +107,11 @@ class Texture {
     uint32_t width { getter; }
     uint32_t height { getter; }
     uint32_t mipmaps { getter; }
-    enum TextureDimension dimension { getter; }
-    enum FilterMode filterMode;
-    enum TextureWrapMode wrapModeU;
-    enum TextureWrapMode wrapModeV;
-    enum TextureWrapMode wrapModeW;
+    TextureDimension dimension { getter; }
+    FilterMode filterMode;
+    TextureWrapMode wrapModeU;
+    TextureWrapMode wrapModeV;
+    TextureWrapMode wrapModeW;
 
     // note: use 'fn' prefix to avoid amibiguity with property def
     static Texture *FromDDSFile(string path) {{

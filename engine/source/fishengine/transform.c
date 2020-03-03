@@ -22,6 +22,29 @@ void TransformPrintHierarchy(SingletonTransformManager *t) {
     puts("]");
 }
 
+void TransformSetLocalToWorldMatrix(SingletonTransformManager *tm, World *w,
+                                    uint32_t idx, float4x4 *l2w) {
+    uint32_t parent = TransformGetParent(tm, idx);
+    Transform *t = TransformGet(w, idx);
+    if (parent == 0) {
+        float4x4_decompose(l2w, &t->localPosition, &t->localRotation,
+                           &t->localScale);
+    } else {
+        // l2w = l2w_parent * localMat => localMat = w2l_parent * l2w
+        float4x4 local =
+            float4x4_mul(TransformGetWorldToLocalMatrix(tm, w, parent), *l2w);
+        float4x4_decompose(&local, &t->localPosition, &t->localRotation,
+                           &t->localScale);
+    }
+}
+void TransformLookAt(SingletonTransformManager *tm, World *w, uint32_t idx,
+                     float3 target) {
+    float3 worldPosition = TransformGetPosition(tm, w, idx);
+    float4x4 w2l = float4x4_look_at(worldPosition, target, float3_up);
+    float4x4 l2w = float4x4_inverse(w2l);
+    TransformSetLocalToWorldMatrix(tm, w, idx, &l2w);
+}
+
 float3 TransformGetPosition(SingletonTransformManager *tm, World *w,
                             uint32_t idx) {
     Transform *t = WorldGetComponentAt(w, TransformID, idx);

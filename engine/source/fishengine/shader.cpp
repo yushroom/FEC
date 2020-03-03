@@ -184,8 +184,8 @@ Shader* ShaderFromFile(const char* path) {
     Shader* s = ShaderNew();
 
     fs::path p = path;
-    std::string vs_name = p.stem().string() + "_1_vs";
-    std::string ps_name = p.stem().string() + "_1_ps";
+    std::string vs_name = p.stem().string() + "_vs";
+    std::string ps_name = p.stem().string() + "_ps";
     const std::string vs_path = vs_name + ".reflect.json";
     const std::string ps_path = ps_name + ".reflect.json";
 

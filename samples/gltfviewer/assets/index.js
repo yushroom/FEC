@@ -509,7 +509,9 @@ function LoadglTF(path)
         e.name = "DirectionalLight";
         e.AddComponent(fe.LightID);
         e.transform.localPosition = [0, 3, 0];
-        e.transform.localEulerAngles = [50, -30, 0];
+        //e.transform.localEulerAngles = [50, -30, 0];
+        e.transform.localPosition = [3, 3, 3];
+        e.transform.LookAt([0, 0, 0]);
     }
 
     return duck;

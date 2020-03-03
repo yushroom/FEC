@@ -16,7 +16,7 @@ add_library(FishEngine
     
     asset.h asset.cpp
     shader.h shader.cpp shader_reflect.hpp shader_util.h shader_util.cpp
-    mesh.h mesh.c
+    mesh.h mesh.c vertexdecl.h
     texture.h texture.c
     material.h material.c material.cpp
     rhi.h 
@@ -46,9 +46,12 @@ endif ()
 if (WIN32)
     add_library(FishEngine_d3d12
         render_d3d12.hpp render_d3d12.cpp
+        vertexdecl_d3d12.cpp
     )
     target_link_libraries(FishEngine_d3d12 PUBLIC FishEngine DirectXTK12 DirectXTex)
     target_link_libraries(FishEngine_d3d12 PUBLIC d3d12 dxgi)
+    # https://github.com/microsoft/DirectX-Graphics-Samples/issues/567
+    target_link_libraries(FishEngine_d3d12 PUBLIC dxguid)
 endif ()
 
 if (APPLE)

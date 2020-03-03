@@ -6,6 +6,7 @@
 #include "array.h"
 #include "ecs.h"
 #include "simd_math.h"
+#include "vertexdecl.h"
 
 #ifdef __cplusplus
 extern "C" {

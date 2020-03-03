@@ -5,32 +5,33 @@
 
 typedef uint32_t TextureID;
 
-enum FilterMode {
+typedef enum {
     FilterModePoint = 0,
     FilterModeBilinear,
     FilterModeTrilinear,
     _FilterModeCount,
-};
+} FilterMode;
 
-enum TextureWrapMode {
+typedef enum {
     TextureWrapModeRepeat = 0,
     TextureWrapModeClamp,
     TextureWrapModeMirror,
     TextureWrapModeMirrorOnce,
     _TextureWrapModeCount,
-};
+} TextureWrapMode;
 
-enum TextureDimension {
+typedef enum {
     TextureDimensionUnknown = -1,
     TextureDimensionNone,
     TextureDimensionAny,
     TextureDimensionTex2D,
+    TextureDimensionTex2DArray,
     TextureDimensionTex3D,
     TextureDimensionCube,
     TextureDimensionCubeArray,
-};
+} TextureDimension;
 
-enum TextureFormat {
+typedef enum {
     TextureFormatInvalid,
     TextureFormatAlpha8,
     TextureFormatBGRA8Unorm,
@@ -52,9 +53,9 @@ enum TextureFormat {
     // is better.When targeting DX11 - class hardware(modern PC, PS4, XboxOne),
     // using BC7 might be useful, since compression quality is often better.
     TextureFormatDXT5,
-};
+} TextureFormat;
 
-enum RenderTextureFormat {
+typedef enum {
     RenderTextureFormatARGB32 = 0,
     RenderTextureFormatDepth,
     RenderTextureFormatARGBHalf,
@@ -85,7 +86,7 @@ enum RenderTextureFormat {
     RenderTextureFormatBGRA10101010_XR,
     RenderTextureFormatBGR101010_XR,
     RenderTextureFormatR16
-};
+} RenderTextureFormat;
 
 enum RenderTextureReadWrite {
     RenderTextureReadWriteDefault,
@@ -98,11 +99,11 @@ struct Texture {
     uint32_t width;
     uint32_t height;
     uint32_t mipmaps;
-    enum TextureDimension dimension;
-    enum FilterMode filterMode;
-    enum TextureWrapMode wrapModeU;
-    enum TextureWrapMode wrapModeV;
-    enum TextureWrapMode wrapModeW;
+    TextureDimension dimension;
+    FilterMode filterMode;
+    TextureWrapMode wrapModeU;
+    TextureWrapMode wrapModeV;
+    TextureWrapMode wrapModeW;
     uint32_t anisoLevel;
 };
 typedef struct Texture Texture;
@@ -113,7 +114,7 @@ extern "C" {
 
 void *TextureNew();
 void TextureFree(void *);
-void TextureSetWrapMode(Texture *t, enum TextureWrapMode mode);
+void TextureSetWrapMode(Texture *t, TextureWrapMode mode);
 Texture *TextureFromDDSFile(const char *path);
 
 #ifdef __cplusplus

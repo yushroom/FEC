@@ -51,6 +51,7 @@ typedef struct TransformNode TransformNode;
 struct SingletonTransformManager {
     float4x4 LocalToWorld[MaxComponent];
     TransformNode H[MaxComponent];
+    float3 LocalEulerAnglesHints[MaxComponent];
     uint32_t count;
     uint32_t modified;
 };
@@ -144,6 +145,15 @@ static inline float4x4 TransformGetLocalToWorldMatrix(
     TransformUpdateLocalToWorldMatrix(tm, w, idx);
     return tm->LocalToWorld[idx];
 }
+static inline float4x4 TransformGetWorldToLocalMatrix(
+    SingletonTransformManager *tm, World *w, uint32_t idx) {
+    return float4x4_inverse(TransformGetLocalToWorldMatrix(tm, w, idx));
+}
+
+void TransformSetLocalToWorldMatrix(SingletonTransformManager *tm, World *w,
+                                    uint32_t idx, float4x4 *l2w);
+void TransformLookAt(SingletonTransformManager *tm, World *w, uint32_t idx,
+                     float3 target);
 
 float3 TransformGetPosition(SingletonTransformManager *tm, World *w,
                             uint32_t idx);

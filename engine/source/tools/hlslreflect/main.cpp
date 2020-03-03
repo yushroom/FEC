@@ -1,5 +1,4 @@
-#include <render_d3d12.hpp>
-
+#include <vector>
 #include <d3d12.h>
 #include <d3dcompiler.h>
 #include <wrl/client.h>
@@ -12,7 +11,14 @@ namespace fs = std::filesystem;
 #include <fmt/format.h>
 #include <rapidjson/prettywriter.h>
 
-#include <shader.h>
+enum ShaderType {
+    ShaderTypeVertex = 0,
+    ShaderTypePixel,
+    ShaderTypeCompute,
+    ShaderTypeGeometry,
+    ShaderTypeHull,
+    ShaderTypeDomain,
+};
 
 struct ShaderReflectType {
     struct Member {
@@ -264,7 +270,7 @@ void Serialize(Writer& writer, ShaderReflectType& type) {
 void Serialize(Writer& writer, ShaderReflectBindInfo& u) {
     writer.StartObject();
     writer.Key("type");
-    writer.String(u.name.c_str());
+    writer.String(u.type.c_str());
     writer.Key("name");
     writer.String(u.name.c_str());
     writer.Key("set");
@@ -277,7 +283,7 @@ void Serialize(Writer& writer, ShaderReflectBindInfo& u) {
 void Serialize(Writer& writer, ShaderReflectCBufferBindInfo& u) {
     writer.StartObject();
     writer.Key("type");
-    writer.String(u.name.c_str());
+    writer.String(u.type.c_str());
     writer.Key("name");
     writer.String(u.name.c_str());
     writer.Key("block_size");
@@ -351,10 +357,6 @@ int main(int argc, char *argv[])
         return 1;
     }
     ShaderReflectShader shader = ReflectShader(blob, ShaderTypeVertex);
-
-    //auto ps = CreateShaderFromCompiledFile(
-    //    R"(E:\workspace\cengine\engine\shaders\runtime\pbrMetallicRoughness_ps.cso)");
-    //reflect.ps = ReflectShader(ps, ShaderTypePixel);
 
     rapidjson::StringBuffer sb;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(sb);

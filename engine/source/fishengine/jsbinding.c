@@ -15,57 +15,11 @@
 #include "texture.h"
 #include "transform.h"
 
-static int JS_ToFloat32(JSContext *ctx, float *v, JSValue val) {
-    double f;
-    int ret = JS_ToFloat64(ctx, &f, val);
-    if (ret == 0) *v = f;
-    return ret;
-}
-
-// static int JS_ToFloat4(JSContext *ctx, float4 *v, JSValue val)
-//{
-//	int ret = JS_ToFloat32(ctx, &v->x, JS_GetPropertyStr(ctx, val, "x"));
-//	ret = ret || JS_ToFloat32(ctx, &v->y, JS_GetPropertyStr(ctx, val, "y"));
-//	ret = ret || JS_ToFloat32(ctx, &v->z, JS_GetPropertyStr(ctx, val, "z"));
-//	JS_ToFloat32(ctx, &v->w, JS_GetPropertyStr(ctx, val, "w"));
-//	return ret;
-//}
-
-static int JS_ToFloat3(JSContext *ctx, float3 *v, JSValue val) {
-    int ret;
-    if (!JS_IsArray(ctx, val)) return 1;
-    ret = JS_ToFloat32(ctx, &v->x, JS_GetPropertyUint32(ctx, val, 0));
-    ret = ret || JS_ToFloat32(ctx, &v->y, JS_GetPropertyUint32(ctx, val, 1));
-    ret = ret || JS_ToFloat32(ctx, &v->z, JS_GetPropertyUint32(ctx, val, 2));
-    return ret;
-}
-
-static int JS_ToFloat4(JSContext *ctx, float4 *v, JSValue val) {
-    int ret;
-    if (!JS_IsArray(ctx, val)) return 1;
-    float x = 0, y = 0, z = 0, w = 0;
-    ret = JS_ToFloat32(ctx, &x, JS_GetPropertyUint32(ctx, val, 0));
-    ret = ret || JS_ToFloat32(ctx, &y, JS_GetPropertyUint32(ctx, val, 1));
-    ret = ret || JS_ToFloat32(ctx, &z, JS_GetPropertyUint32(ctx, val, 2));
-    ret = ret || JS_ToFloat32(ctx, &w, JS_GetPropertyUint32(ctx, val, 3));
-    float4 _v = {x, y, z, w};
-    *v = _v;
-    return ret;
-}
-
-static int JS_ToFloat4x4(JSContext *ctx, float4x4 *v, JSValue val) {
-    int ret = 0;
-    if (!JS_IsArray(ctx, val)) return 1;
-    for (int i = 0; i < 16; ++i)
-        ret = ret ||
-              JS_ToFloat32(ctx, &v->a[i], JS_GetPropertyUint32(ctx, val, i));
-    return ret;
-}
-
 World *defaultWorld = NULL;
 
 void SetDefaultWorld(World *w) { defaultWorld = w; }
 
+extern JSClassID js_fe_Transform_class_id;
 extern JSClassID js_fe_Animation_class_id;
 extern JSClassID js_fe_Texture_class_id;
 extern JSClassID js_fe_Light_class_id;
@@ -82,12 +36,6 @@ static JSClassDef js_fe_world_class = {
 JSClassID js_fe_entity_class_id;
 static JSClassDef js_fe_entity_class = {
     "Entity",
-    .finalizer = NULL,
-};
-
-JSClassID js_fe_transform_class_id;
-static JSClassDef js_fe_transform_class = {
-    "Transform",
     .finalizer = NULL,
 };
 
@@ -205,7 +153,7 @@ static JSValue js_fe_Entity_tranform_getter(JSContext *ctx,
     if (!p) return JS_EXCEPTION;
     Entity e = (Entity)p;
     void *comp = EntityGetComponent(e, defaultWorld, TransformID);
-    return js_wrap_class(ctx, comp, js_fe_transform_class_id);
+    return js_wrap_class(ctx, comp, js_fe_Transform_class_id);
 }
 
 // string name getter
@@ -250,7 +198,7 @@ PFUNC(Entity, AddComponent) {
     void *comp = EntityAddComponent(e, defaultWorld, type);
     if (type == TransformID) {
         TransformInit((Transform *)comp);
-        return js_wrap_class(ctx, comp, js_fe_transform_class_id);
+        return js_wrap_class(ctx, comp, js_fe_Transform_class_id);
     } else if (type == CameraID) {
         CameraInit((Camera *)comp);
         return js_wrap_class(ctx, comp, js_fe_Camera_class_id);
@@ -276,7 +224,7 @@ PFUNC(Entity, GetComponent) {
     if (JS_ToUint32(ctx, &type, argv[0])) return JS_EXCEPTION;
     void *comp = EntityGetComponent(e, defaultWorld, type);
     if (type == TransformID)
-        return js_wrap_class(ctx, comp, js_fe_transform_class_id);
+        return js_wrap_class(ctx, comp, js_fe_Transform_class_id);
     else if (type == CameraID)
         return js_wrap_class(ctx, comp, js_fe_Camera_class_id);
     else if (type == AnimationID)
@@ -293,186 +241,6 @@ static const JSCFunctionListEntry js_fe_entity_proto_funcs[] = {
     JS_CFUNC_DEF("AddComponent", 1, js_fe_Entity_AddComponent),
     JS_CFUNC_DEF("GetComponent", 1, js_fe_Entity_GetComponent),
 };
-
-enum FE_TRANSFORM_PROP {
-    E_parent = 0,
-    E_localPosition,
-    E_localRotation,
-    E_localScale,
-    E_localEulerAngles,
-    E_position,
-    E_rotation,
-    E_scale,
-    E_local2Wrold,
-    E_localMatrix,
-};
-
-static JSValue js_fe_make_float3(JSContext *ctx, float3 v) {
-    JSValue e = JS_NewArray(ctx);
-    //	JS_DefinePropertyValueStr(ctx, e, "x", JS_NewFloat64(ctx, v[0]),
-    // JS_PROP_C_W_E); 	JS_DefinePropertyValueStr(ctx, e, "y",
-    // JS_NewFloat64(ctx, v[1]), JS_PROP_C_W_E);
-    // JS_DefinePropertyValueStr(ctx, e, "z", JS_NewFloat64(ctx, v[2]),
-    // JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 0, JS_NewFloat64(ctx, v.x),
-                                 JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 1, JS_NewFloat64(ctx, v.y),
-                                 JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 2, JS_NewFloat64(ctx, v.z),
-                                 JS_PROP_C_W_E);
-    return e;
-}
-
-static JSValue js_fe_make_float4(JSContext *ctx, float4 v) {
-    JSValue e = JS_NewArray(ctx);
-    //	JS_DefinePropertyValueStr(ctx, e, "x", JS_NewFloat64(ctx, v[0]),
-    // JS_PROP_C_W_E); 	JS_DefinePropertyValueStr(ctx, e, "y",
-    // JS_NewFloat64(ctx, v[1]), JS_PROP_C_W_E);
-    // JS_DefinePropertyValueStr(ctx, e, "z", JS_NewFloat64(ctx, v[2]),
-    // JS_PROP_C_W_E); 	JS_DefinePropertyValueStr(ctx, e, "w",
-    // JS_NewFloat64(ctx, v[3]), JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 0, JS_NewFloat64(ctx, v[0]),
-                                 JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 1, JS_NewFloat64(ctx, v[1]),
-                                 JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 2, JS_NewFloat64(ctx, v[2]),
-                                 JS_PROP_C_W_E);
-    JS_DefinePropertyValueUint32(ctx, e, 3, JS_NewFloat64(ctx, v[3]),
-                                 JS_PROP_C_W_E);
-    return e;
-}
-
-static JSValue js_fe_Transform_getter(JSContext *ctx, JSValueConst this_val,
-                                      int magic) {
-    Transform *t = JS_GetOpaque2(ctx, this_val, js_fe_transform_class_id);
-    if (!t) return JS_EXCEPTION;
-    switch (magic) {
-        case E_parent: {
-            SingletonTransformManager *tm = WorldGetSingletonComponent(
-                defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, t);
-            uint32_t p = TransformGetParent(tm, index);
-            if (p == 0) return JS_NULL;
-            Transform *parent = array_at(&a->m, p);
-            return js_wrap_class(ctx, parent, js_fe_transform_class_id);
-        }
-        case E_localPosition:
-            return js_fe_make_float3(ctx, t->localPosition);
-        case E_localRotation:
-            return js_fe_make_float4(ctx, t->localRotation);
-        case E_localEulerAngles: {
-            float3 e = quat_to_euler(t->localRotation);
-            return js_fe_make_float3(ctx, e);
-        }
-        case E_localScale:
-            return js_fe_make_float3(ctx, t->localScale);
-        case E_position: {
-            SingletonTransformManager *tm = WorldGetSingletonComponent(
-                defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, t);
-            float3 pos = TransformGetPosition(tm, defaultWorld, index);
-            return js_fe_make_float3(ctx, pos);
-        }
-        default:
-            break;
-    }
-    return JS_NULL;
-}
-
-static JSValue js_fe_Transform_setter(JSContext *ctx, JSValueConst this_val,
-                                      JSValue val, int magic) {
-    Transform *t = JS_GetOpaque2(ctx, this_val, js_fe_transform_class_id);
-    if (!t) return JS_EXCEPTION;
-    SingletonTransformManager *tm =
-        WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, t);
-    if (!t) return JS_EXCEPTION;
-    switch (magic) {
-        case E_parent: {
-            Transform *p = JS_GetOpaque2(ctx, val, js_fe_transform_class_id);
-            if (!p) return JS_EXCEPTION;
-            uint32_t parent = array_get_index(&a->m, p);
-            const uint32_t child = index;
-            TransformSetParent(tm, child, parent);
-            break;
-        }
-        case E_localPosition: {
-            float3 v;
-            if (JS_ToFloat3(ctx, &v, val)) return JS_EXCEPTION;
-            t->localPosition = v;
-            TransformSetDirty(tm, index);
-            break;
-        }
-        case E_localRotation: {
-            quat r;
-            if (JS_ToFloat4(ctx, &r, val)) return JS_EXCEPTION;
-            t->localRotation = quat_normalize(r);
-            TransformSetDirty(tm, index);
-            break;
-        }
-        case E_localScale: {
-            float3 v;
-            if (JS_ToFloat3(ctx, &v, val)) return JS_EXCEPTION;
-            t->localScale = v;
-            TransformSetDirty(tm, index);
-            break;
-        }
-        case E_localEulerAngles: {
-            float3 v;
-            if (JS_ToFloat3(ctx, &v, val)) return JS_EXCEPTION;
-            t->localRotation = euler_to_quat(v);
-            TransformSetDirty(tm, index);
-            break;
-        }
-        case E_localMatrix: {
-            float4x4 m;
-            if (JS_ToFloat4x4(ctx, &m, val)) return JS_EXCEPTION;
-            float4x4_decompose(&m, &t->localPosition, &t->localRotation,
-                               &t->localScale);
-            TransformSetDirty(tm, index);
-            break;
-        }
-    }
-    return JS_UNDEFINED;
-}
-
-static const JSCFunctionListEntry js_fe_transform_proto_funcs[] = {
-    //	JS_CFUNC_DEF("SetParent", 0, js_fe_Transform_SetParent),
-    JS_CGETSET_MAGIC_DEF("parent", js_fe_Transform_getter,
-                         js_fe_Transform_setter, E_parent),
-    JS_CGETSET_MAGIC_DEF("localPosition", js_fe_Transform_getter,
-                         js_fe_Transform_setter, E_localPosition),
-    JS_CGETSET_MAGIC_DEF("localRotation", js_fe_Transform_getter,
-                         js_fe_Transform_setter, E_localRotation),
-    JS_CGETSET_MAGIC_DEF("localEulerAngles", js_fe_Transform_getter,
-                         js_fe_Transform_setter, E_localEulerAngles),
-    JS_CGETSET_MAGIC_DEF("localScale", js_fe_Transform_getter,
-                         js_fe_Transform_setter, E_localScale),
-    JS_CGETSET_MAGIC_DEF("position", js_fe_Transform_getter, NULL, E_position),
-    JS_CGETSET_MAGIC_DEF("localMatrix", NULL, js_fe_Transform_setter,
-                         E_localMatrix),
-};
-
-// static JSValue js_fe_render_CombineMeshes(JSContext *ctx,
-//                                          JSValueConst this_value, int argc,
-//                                          JSValueConst *argv) {
-//    if (argc < 2) return JS_NULL;
-//    assert(argc < 32);
-//    Mesh *meshes[argc];
-//    Mesh *combined = NULL;
-//    for (int i = 0; i < argc; ++i) {
-//        Mesh *mesh = JS_GetOpaque2(ctx, argv[i], js_fe_Mesh_class_id);
-//        if (!mesh) return JS_EXCEPTION;
-//        meshes[i] = mesh;
-//    }
-//
-//    combined = MeshCombine(meshes, argc);
-//    if (!combined) return JS_NULL;
-//    return js_wrap_class(ctx, combined, js_fe_Mesh_class_id);
-//}
 
 static JSValue js_fe_render_ConvertTexture(JSContext *ctx,
                                            JSValueConst this_value, int argc,
@@ -516,9 +284,6 @@ static JSValue js_fe_system(JSContext *ctx, JSValueConst this_value, int argc,
 
 static const JSCFunctionListEntry js_fe_funcs[] = {
     JS_CFUNC_DEF("GetDefaultWorld", 0, js_fe_GetDefaultWorld),
-    //	JS_CFUNC_DEF("CreateBuffer", 3, js_fe_render_createbuffer),
-    //    JS_CFUNC_DEF("CreateTexture", 3, js_fe_render_createtexture),
-    //    JS_CFUNC_DEF("CombineMeshes", 2, js_fe_render_CombineMeshes),
     JS_CFUNC_DEF("ConvertTexture", 1, js_fe_render_ConvertTexture),
     JS_CFUNC_DEF("reload", 0, js_fe_reload),
     JS_CFUNC_DEF("system", 1, js_fe_system),
@@ -593,7 +358,7 @@ JSClassID js_def_class2(JSContext *ctx, JSClassDef *class_def,
 static int js_fe_init(JSContext *ctx, JSModuleDef *m) {
     CreateClass(world);
     CreateClass(entity);
-    CreateClass(transform);
+    //CreateClass(transform);
     js_fe_init_extra(ctx, m);
     JS_SetModuleExportList(ctx, m, js_fe_funcs, countof(js_fe_funcs));
     return 0;
@@ -605,7 +370,7 @@ JSModuleDef *js_init_module_fishengine(JSContext *ctx,
     m = JS_NewCModule(ctx, module_name, js_fe_init);
     if (!m) return NULL;
     JS_AddModuleExport(ctx, m, js_fe_world_class.class_name);
-    JS_AddModuleExport(ctx, m, js_fe_transform_class.class_name);
+    //JS_AddModuleExport(ctx, m, js_fe_transform_class.class_name);
     js_init_module_fishengine_extra(ctx, m);
     JS_AddModuleExportList(ctx, m, js_fe_funcs, countof(js_fe_funcs));
     return m;

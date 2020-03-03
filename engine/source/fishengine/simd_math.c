@@ -1,12 +1,12 @@
 #include "simd_math.h"
 
 enum RotationOrder {
-    XYZ = 0,  // default
-    YZX,
-    ZXY,
-    XZY,
-    YXZ,
-    ZYX
+    RotationOrderXYZ = 0,
+    RotationOrderYZX,
+    RotationOrderZXY,  // unity
+    RotationOrderXZY,
+    RotationOrderYXZ,
+    RotationOrderZYX
 };
 
 float float4x4_determinant(float4x4 this) {
@@ -89,9 +89,9 @@ float3 makeEulerFromRotation(float4x4 m) {
     float m21 = te[1], m22 = te[5], m23 = te[9];
     float m31 = te[2], m32 = te[6], m33 = te[10];
 
-    const enum RotationOrder order = XYZ;
+    const enum RotationOrder order = RotationOrderZXY;
 
-    if (order == XYZ) {
+    if (order == RotationOrderXYZ) {
         this.y = asin(clamp(m13, -1, 1));
 
         if (fabsf(m13) < 0.9999999f) {
@@ -103,7 +103,7 @@ float3 makeEulerFromRotation(float4x4 m) {
             this.z = 0;
         }
 
-    } else if (order == YXZ) {
+    } else if (order == RotationOrderYXZ) {
         this.x = asin(-clamp(m23, -1, 1));
 
         if (fabsf(m23) < 0.9999999f) {
@@ -115,7 +115,7 @@ float3 makeEulerFromRotation(float4x4 m) {
             this.z = 0;
         }
 
-    } else if (order == ZXY) {
+    } else if (order == RotationOrderZXY) {
         this.x = asin(clamp(m32, -1, 1));
 
         if (fabsf(m32) < 0.9999999f) {
@@ -127,7 +127,7 @@ float3 makeEulerFromRotation(float4x4 m) {
             this.z = atan2(m21, m11);
         }
 
-    } else if (order == ZYX) {
+    } else if (order == RotationOrderZYX) {
         this.y = asin(-clamp(m31, -1, 1));
 
         if (fabsf(m31) < 0.9999999f) {
@@ -139,7 +139,7 @@ float3 makeEulerFromRotation(float4x4 m) {
             this.z = atan2(-m12, m22);
         }
 
-    } else if (order == YZX) {
+    } else if (order == RotationOrderYZX) {
         this.z = asin(clamp(m21, -1, 1));
 
         if (fabsf(m21) < 0.9999999f) {
@@ -151,7 +151,7 @@ float3 makeEulerFromRotation(float4x4 m) {
             this.y = atan2(m13, m33);
         }
 
-    } else if (order == XZY) {
+    } else if (order == RotationOrderXZY) {
         this.z = asin(-clamp(m12, -1, 1));
 
         if (fabsf(m12) < 0.9999999f) {
@@ -184,38 +184,38 @@ quat euler_to_quat(float3 e) {
     SinCos(e.z / 2.f, s3, c3);
 
     quat q;
-    const enum RotationOrder order = XYZ;
-    if (order == XYZ) {
+    const enum RotationOrder order = RotationOrderZXY;
+    if (order == RotationOrderXYZ) {
         q.x = s1 * c2 * c3 + c1 * s2 * s3;
         q.y = c1 * s2 * c3 - s1 * c2 * s3;
         q.z = c1 * c2 * s3 + s1 * s2 * c3;
         q.w = c1 * c2 * c3 - s1 * s2 * s3;
 
-    } else if (order == YXZ) {
+    } else if (order == RotationOrderYXZ) {
         q.x = s1 * c2 * c3 + c1 * s2 * s3;
         q.y = c1 * s2 * c3 - s1 * c2 * s3;
         q.z = c1 * c2 * s3 - s1 * s2 * c3;
         q.w = c1 * c2 * c3 + s1 * s2 * s3;
 
-    } else if (order == ZXY) {
+    } else if (order == RotationOrderZXY) {
         q.x = s1 * c2 * c3 - c1 * s2 * s3;
         q.y = c1 * s2 * c3 + s1 * c2 * s3;
         q.z = c1 * c2 * s3 + s1 * s2 * c3;
         q.w = c1 * c2 * c3 - s1 * s2 * s3;
 
-    } else if (order == ZYX) {
+    } else if (order == RotationOrderZYX) {
         q.x = s1 * c2 * c3 - c1 * s2 * s3;
         q.y = c1 * s2 * c3 + s1 * c2 * s3;
         q.z = c1 * c2 * s3 - s1 * s2 * c3;
         q.w = c1 * c2 * c3 + s1 * s2 * s3;
 
-    } else if (order == YZX) {
+    } else if (order == RotationOrderYZX) {
         q.x = s1 * c2 * c3 + c1 * s2 * s3;
         q.y = c1 * s2 * c3 + s1 * c2 * s3;
         q.z = c1 * c2 * s3 - s1 * s2 * c3;
         q.w = c1 * c2 * c3 - s1 * s2 * s3;
 
-    } else if (order == XZY) {
+    } else if (order == RotationOrderXZY) {
         q.x = s1 * c2 * c3 - c1 * s2 * s3;
         q.y = c1 * s2 * c3 - s1 * c2 * s3;
         q.z = c1 * c2 * s3 + s1 * s2 * c3;

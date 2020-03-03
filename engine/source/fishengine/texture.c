@@ -24,7 +24,7 @@ void TextureFree(void *t) {
     free(t);
 }
 
-void TextureSetWrapMode(Texture *t, enum TextureWrapMode mode) {
+void TextureSetWrapMode(Texture *t, TextureWrapMode mode) {
     t->wrapModeU = t->wrapModeV = t->wrapModeW = mode;
 }
 

@@ -32,6 +32,7 @@ typedef int GPUResourceUsageFlags;
 
 typedef uint32_t BufferHandle;
 typedef uint32_t ShaderHandle;
+typedef uint32_t TextureHandle;
 
 // set memory.buffer = NULL if you want to create an empty buffer
 BufferHandle CreateBuffer(Memory memory, GPUResourceUsageFlags usage);
@@ -51,6 +52,9 @@ struct Renderable;
 int SimpleDraw(Transform *t, struct Renderable *r);
 int GPUSkinning(struct Renderable *r);
 void BeginPass();
+
+void BeginRenderEvent(const char *label);
+void EndRenderEvent();
 
 #ifdef __cplusplus
 }

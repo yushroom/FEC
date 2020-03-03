@@ -240,9 +240,16 @@ void inspector(World *w) {
         if (ImGui::InputFloat3("position", &t->localPosition.x)) {
             TransformSetDirty(tm, idx);
         }
-        float3 euler = quat_to_euler(t->localRotation);
+        auto eulerHint = tm->LocalEulerAnglesHints[idx];
+        float3 euler;
+        bool useHint = !float3_is_zero(eulerHint);
+        if (useHint)
+            euler = eulerHint;
+        else
+            euler = quat_to_euler(t->localRotation);
         if (ImGui::InputFloat3("rotation", &euler.x)) {
             t->localRotation = euler_to_quat(euler);
+            tm->LocalEulerAnglesHints[idx] = euler;
             TransformSetDirty(tm, idx);
         }
         if (ImGui::InputFloat3("scale", &t->localScale.x)) {

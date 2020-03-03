@@ -5,6 +5,7 @@
 #include <math.h>
 #include <string.h>
 #include <xmmintrin.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,6 +25,10 @@ typedef struct {
     (float3) { 0, 1, 0 }
 #define float3_right \
     (float3) { 1, 0, 0 }
+
+static inline bool float3_is_zero(float3 v) {
+    return v.x == 0 && v.y == 0 && v.z == 0;
+}
 
 #if __clang__
 typedef __attribute__((ext_vector_type(4))) float float4;

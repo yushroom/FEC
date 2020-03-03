@@ -1,27 +1,31 @@
 #include "render_d3d12.hpp"
 
-#include <DescriptorHeap.h>
-#include <DirectXHelpers.h>
-#include <EffectPipelineStateDescription.h>
-#include <GraphicsMemory.h>
-#include <ResourceUploadBatch.h>
 #include <d3d12.h>
 #include <d3dcompiler.h>
 #include <d3dx12.h>
 #include <dxgi1_4.h>
 #include <winerror.h>
 #include <wrl/client.h>
-using Microsoft::WRL::ComPtr;
 
+#include <cassert>
+using Microsoft::WRL::ComPtr;
+#include <DescriptorHeap.h>
+#include <DirectXHelpers.h>
+#include <DirectXTex.h>
+#include <EffectPipelineStateDescription.h>
+#include <GraphicsMemory.h>
+#include <ResourceUploadBatch.h>
 #include <fmt/format.h>
+#include <pix.h>
 
 #include <filesystem>
 #include <system_error>
 namespace fs = std::filesystem;
 
 #include "rhi.h"
-#include "statistics.h"
 #include "shader.h"
+#include "statistics.h"
+#include "texture.h"
 
 #if _DEBUG
 #define DX12_ENABLE_DEBUG_LAYER
@@ -66,7 +70,18 @@ static DirectX::ResourceUploadBatch* g_GPUResourceUploader = nullptr;
 static std::vector<ID3D12Resource*> g_PendingResources[NUM_FRAMES_IN_FLIGHT];
 static UINT g_CurrentBackBufferIndex = 0;
 static ComPtr<ID3D12RootSignature> g_TestRootSignature;
+static ID3D12PipelineState* g_TestPSO = NULL;
 static DirectX::GraphicsMemory* g_CBVMemory = nullptr;
+DirectX::DescriptorPile* g_RTVDescriptorHeap;
+DirectX::DescriptorPile* g_DSVDescriptorHeap;
+DirectX::DescriptorPile* g_StaticSamplerDescriptorHeap;
+DirectX::DescriptorPile* g_StaticSrvDescriptorHeap;
+DirectX::DescriptorPile* g_StaticUavDescriptorHeap;
+DirectX::DescriptorPile* g_DynamicSrvUavDescriptorHeap;
+DirectX::DescriptorPile* g_DynamicSamplerDescriptorHeap;
+TextureHandle g_MainDepthRT = 0;
+D3D12_CPU_DESCRIPTOR_HANDLE emptySRV2D;
+D3D12_CPU_DESCRIPTOR_HANDLE emptySRV3D;
 
 struct StatedD3D12Resource {
     ID3D12Resource* resource = nullptr;
@@ -141,6 +156,12 @@ inline void SetDebugObjectName(ID3D12DeviceChild* resource,
     (void)name;
 #endif
 }
+
+void BeginRenderEvent(const char* label) {
+    PIXBeginEvent(g_pCommandList, 0, label);
+}
+
+void EndRenderEvent() { PIXEndEvent(g_pCommandList); }
 
 static ID3D12Resource* InternalCreateBuffer(uint32_t byteSize, int bufferUsage,
                                             D3D12_RESOURCE_STATES initState) {
@@ -351,12 +372,405 @@ void ReflectShader(ID3D10Blob* shader, ShaderType shaderType) {
 
 void DeleteShader(uint32_t shaderID) {}
 
+enum class RenderTextureCreationFlags : uint32_t {
+    MipMap = 1 << 0,
+    AutoGenerateMips = 1 << 1,
+    SRGB = 1 << 2,
+    EyeTexture = 1 << 3,
+    EnableRandomWrite = 1 << 4,
+    CreatedFromScript = 1 << 5,
+    AllowVerticalFlip = 1 << 6,
+    NoResolvedColorSurface = 1 << 7,
+    DynamicallyScalable = 1 << 8,
+    BindMS = 1 << 9
+};
+
+inline RenderTextureCreationFlags& operator|=(RenderTextureCreationFlags& lhs,
+                                              RenderTextureCreationFlags rhs) {
+    uint32_t l = (uint32_t)lhs;
+    l |= (uint32_t)rhs;
+    lhs = (RenderTextureCreationFlags)l;
+    return lhs;
+};
+
+template <typename T>
+struct HashBuilder {
+    T h = 0;
+    int usedBits = 0;
+    void with(T v, int bits) {
+        assert(v < (((T)1) << bits));
+        h <<= bits;
+        h |= v;
+        usedBits += bits;
+        assert(usedBits <= sizeof(h) * 8);
+    }
+};
+
+struct RenderTextureDescriptor {
+    RenderTextureDescriptor() = default;
+    RenderTextureDescriptor(int width, int height)
+        : width(width), height(height) {}
+    RenderTextureDescriptor(int width, int height,
+                            RenderTextureFormat colorFormat)
+        : width(width), height(height), colorFormat(colorFormat){};
+    RenderTextureDescriptor(int width, int height,
+                            RenderTextureFormat colorFormat,
+                            int depthBufferBits)
+        : width(width),
+          height(height),
+          colorFormat(colorFormat),
+          depthBufferBits(depthBufferBits) {}
+
+    // RenderTextureCreationFlags flags = (RenderTextureCreationFlags)0;
+    bool autoGenerateMips = false;
+    bool useMipmap = false;
+    bool sRGB = false;
+    bool enableRandomWrite = false;
+    int msaaSamples = 1;
+    TextureDimension dimension = TextureDimensionTex2D;
+    int depthBufferBits = 24;  // 0, 16, 24
+    RenderTextureFormat colorFormat = RenderTextureFormatARGB32;
+    int height = 1;
+    int width = 1;
+    int volumeDepth = 1;  // 1~2000
+
+    RenderTextureCreationFlags flags() const {
+        RenderTextureCreationFlags f = RenderTextureCreationFlags(0);
+        if (useMipmap) f |= RenderTextureCreationFlags::MipMap;
+        if (autoGenerateMips) f |= RenderTextureCreationFlags::AutoGenerateMips;
+        if (sRGB) f |= RenderTextureCreationFlags::SRGB;
+        if (enableRandomWrite)
+            f |= RenderTextureCreationFlags::EnableRandomWrite;
+        return f;
+    }
+
+    typedef uint64_t H;
+
+    H Hash() const {
+        HashBuilder<H> h;
+        h.with((H)flags(), 10);
+        h.with((H)dimension, 3);
+        h.with((H)colorFormat, 5);
+        int dbb = depthBufferBits == 0 ? 0 : (depthBufferBits == 16 ? 1 : 2);
+        h.with((H)dbb, 2);
+        h.with((H)width, 14);
+        h.with((H)height, 14);
+        h.with((H)volumeDepth, 11);
+        h.with((H)msaaSamples, 5);
+        return h.h;
+    }
+};
+
+class Static {
+   public:
+    Static() = delete;
+};
+
+class SystemInfo : public Static {
+   public:
+    static constexpr bool usesReversedZBuffer = false;
+};
+
+inline DXGI_FORMAT Translate(RenderTextureFormat format) {
+    DXGI_FORMAT f = DXGI_FORMAT_UNKNOWN;
+    switch (format) {
+        case RenderTextureFormatR8:
+            f = DXGI_FORMAT_R8_UNORM;
+            break;
+        case RenderTextureFormatRHalf:
+            f = DXGI_FORMAT_R16_FLOAT;
+            break;
+        case RenderTextureFormatRFloat:
+            f = DXGI_FORMAT_R32_FLOAT;
+            break;
+        case RenderTextureFormatARGB32:
+            f = DXGI_FORMAT_R8G8B8A8_UNORM;
+            break;
+        case RenderTextureFormatDepth:
+            f = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+            break;
+        case RenderTextureFormatARGB2101010:
+            f = DXGI_FORMAT_R10G10B10A2_UNORM;
+            break;
+        case RenderTextureFormatRGB111110Float:
+            f = DXGI_FORMAT_R11G11B10_FLOAT;
+            break;
+        case RenderTextureFormatRGHalf:
+            f = DXGI_FORMAT_R16G16_FLOAT;
+            break;
+        default:
+            abort();
+    }
+    return f;
+}
+
+TextureHandle InternalCreateRenderTexture(const RenderTextureDescriptor& desc) {
+    ID3D12Resource* texture = nullptr;
+
+    DXGI_FORMAT dxgiFormat = Translate(desc.colorFormat);
+    if (desc.sRGB) {
+        dxgiFormat = DirectX::MakeSRGB(dxgiFormat);
+    }
+    DXGI_FORMAT dxgiFormat_typeless = DirectX::MakeTypeless(dxgiFormat);
+    if (dxgiFormat == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+        dxgiFormat_typeless = DXGI_FORMAT_R32G8X24_TYPELESS;
+    }
+    CD3DX12_RESOURCE_DESC colorDesc;
+    if (desc.dimension == TextureDimensionTex2D ||
+        desc.dimension == TextureDimensionTex2DArray)
+        colorDesc =
+            CD3DX12_RESOURCE_DESC::Tex2D(dxgiFormat_typeless, desc.width,
+                                         desc.height, (UINT16)desc.volumeDepth);
+    else
+        abort();
+    assert(!desc.useMipmap);
+    colorDesc.MipLevels = 1;
+    D3D12_CLEAR_VALUE colorClearValue;
+    colorClearValue.Format = dxgiFormat;
+    bool isDepth = desc.colorFormat == RenderTextureFormatDepth;
+    if (isDepth) {
+        colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        colorClearValue.DepthStencil.Depth = 1.0f;
+        if constexpr (SystemInfo::usesReversedZBuffer) {
+            colorClearValue.DepthStencil.Depth = 0.0f;
+        }
+        colorClearValue.DepthStencil.Stencil = 0;
+    } else {
+        colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        colorClearValue.Color[0] = 1.f;
+        colorClearValue.Color[1] = 0.f;
+        colorClearValue.Color[2] = 0.f;
+        colorClearValue.Color[3] = 1.f;
+    }
+    if (desc.enableRandomWrite) {
+        colorDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+
+    // bool newCreated = !handle.IsValid();
+    // if (newCreated) handle.id = g_Textures.Next();
+    TextureHandle handle = g_Textures.size();
+    bool newCreated = true;
+
+    auto& t = g_Textures.emplace_back();
+    assert(t.resource == nullptr);
+
+    D3D12_RESOURCE_STATES initState = D3D12_RESOURCE_STATE_COMMON;
+    if (!newCreated) initState = t.state;
+    auto heap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    ThrowIfFailed(g_Device->CreateCommittedResource(
+        &heap, D3D12_HEAP_FLAG_NONE, &colorDesc, initState, &colorClearValue,
+        IID_PPV_ARGS(&texture)));
+
+    t.resource = texture;
+    t.state = initState;
+    t.format = dxgiFormat;
+    t.width = desc.width;
+    t.height = desc.height;
+
+    if (isDepth) {
+        if (newCreated) {
+            size_t start = g_DSVDescriptorHeap->Allocate();
+            t.dsvIndex = start;
+        }
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
+        memset(&dsv, 0, sizeof(dsv));
+        dsv.Format = dxgiFormat;
+        dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        dsv.Texture2D.MipSlice = 0;
+        D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle =
+            g_DSVDescriptorHeap->GetCpuHandle(t.dsvIndex);
+        g_Device->CreateDepthStencilView(texture, &dsv, dsvHandle);
+    } else {
+        if (newCreated) {
+            size_t start = g_RTVDescriptorHeap->Allocate();
+            t.rtvIndex = start;
+        }
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle =
+            g_RTVDescriptorHeap->GetCpuHandle(t.rtvIndex);
+        D3D12_RENDER_TARGET_VIEW_DESC rtv = {};
+        memset(&rtv, 0, sizeof(rtv));
+        rtv.Format = dxgiFormat;
+        rtv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        rtv.Texture2D.MipSlice = 0;
+        rtv.Texture2D.PlaneSlice = 0;
+        g_Device->CreateRenderTargetView(texture, &rtv, rtvHandle);
+    }
+    {
+        // if (newCreated)
+        {
+            size_t start = g_StaticSrvDescriptorHeap->Allocate();
+            // assert(start == handle.id);
+            t.srvIndex = start;
+        }
+        D3D12_CPU_DESCRIPTOR_HANDLE srvHandle =
+            g_StaticSrvDescriptorHeap->GetCpuHandle(t.srvIndex);
+        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+        ZeroMemory(&srvDesc, sizeof(srvDesc));
+        srvDesc.Format = dxgiFormat;
+        if (srvDesc.Format == DXGI_FORMAT_D32_FLOAT) {
+            srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+        } else if (srvDesc.Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+            srvDesc.Format = DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+        }
+        srvDesc.Shader4ComponentMapping =
+            D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        if (desc.dimension == TextureDimensionTex2D) {
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels = colorDesc.MipLevels;
+            srvDesc.Texture2D.MostDetailedMip = 0;
+            srvDesc.Texture2D.PlaneSlice = 0;
+            srvDesc.Texture2D.ResourceMinLODClamp = 0.f;
+        } else if (desc.dimension == TextureDimensionTex2DArray) {
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+            srvDesc.Texture2DArray.MipLevels = colorDesc.MipLevels;
+            srvDesc.Texture2DArray.ArraySize = desc.volumeDepth;
+        } else {
+            abort();
+        }
+        g_Device->CreateShaderResourceView(texture, &srvDesc, srvHandle);
+    }
+    return handle;
+}
+
+struct PerDrawUniforms {
+    float4x4 MATRIX_MVP;
+    float4x4 MATRIX_MV;
+    float4x4 MATRIX_M;
+    float4x4 MATRIX_IT_M;
+};
+
+struct PerCameraUniforms {
+    float4x4 MATRIX_P;
+    float4x4 MATRIX_V;
+    float4x4 MATRIX_I_V;
+    float4x4 MATRIX_VP;
+
+    float4 WorldSpaceCameraPos;  // w = 1, not used
+    float4 WorldSpaceCameraDir;  // w = 0, not used
+};
+
+struct LightingUniforms {
+    float4 LightPos;  // w=1 not used
+    float4 LightDir;  // w=0 not used
+};
+
+struct BuiltinConstantBuffers {
+    struct PerDrawUniforms cb1;
+    struct PerCameraUniforms cb2;
+    struct LightingUniforms cb3;
+};
+
+#include "camera.h"
+#include "ecs.h"
+#include "light.h"
+#include "transform.h"
+
+extern "C" {
+extern World* defaultWorld;
+}
+
 #include "renderable.h"
 struct Renderable;
 // struct Transform;
 int SimpleDraw(Transform* t, struct Renderable* r) {
     if (!t || !r || !r->mesh) return 0;
+
+    BeginRenderEvent("SimpleDraw");
     g_pCommandList->SetGraphicsRootSignature(g_TestRootSignature.Get());
+
+    World* w = defaultWorld;
+    Camera* camera = CameraGetMainCamera(w);
+    Entity cameraEntity = ComponentGetEntity(w, camera, CameraID);
+    SingletonTransformManager* tm =
+        (SingletonTransformManager*)WorldGetSingletonComponent(
+            w, SingletonTransformManagerID);
+
+    uint32_t tindex = WorldGetComponentIndex(w, t, TransformID);
+
+    float4x4 l2w = TransformGetLocalToWorldMatrix(tm, w, tindex);
+
+    float4x4 view;
+    float3 cameraPos, cameraDir;
+    {
+        cameraDir = TransformGetForward(tm, w, cameraEntity);
+        cameraPos = TransformGetPosition(tm, w, cameraEntity);
+        float3 up = TransformGetUp(tm, w, cameraEntity);
+        view = float4x4_look_to(cameraPos, cameraDir, up);
+        //		float4x4 camera2world =
+        // TransformGetLocalToWorldMatrix(tm, w, cameraEntity);
+        //        view = float4x4_inverse(camera2world); // this view mat
+        //        contains local scale
+        // reverse-z
+        //		view = float4x4_mul(view, float4x4_diagonal(1, 1, -1,
+        // 1));
+    }
+
+    // const float aspect =
+    //    g_layer.drawableSize.width / g_layer.drawableSize.height;
+    const float aspect = 1280.f / 800.f;
+    float4x4 p =
+        float4x4_perspective(camera->fieldOfView, aspect, camera->nearClipPlane,
+                             camera->farClipPlane);
+    //    float orthoSize = 5;
+    //    float4x4 p = float4x4_ortho(-orthoSize * aspect, orthoSize * aspect,
+    //    -orthoSize, orthoSize,
+    //                                camera->nearClipPlane,
+    //                                camera->farClipPlane);
+    float4x4 mvp = float4x4_mul(p, float4x4_mul(view, l2w));
+
+    struct BuiltinConstantBuffers g_cbuffers = {};
+    g_cbuffers.cb1.MATRIX_MVP = mvp;
+    g_cbuffers.cb1.MATRIX_MV = float4x4_mul(view, l2w);
+    g_cbuffers.cb1.MATRIX_M = l2w;
+    g_cbuffers.cb1.MATRIX_IT_M = float4x4_transpose(float4x4_inverse(l2w));
+
+    g_cbuffers.cb2.MATRIX_P = p;
+    g_cbuffers.cb2.MATRIX_V = view;
+    g_cbuffers.cb2.MATRIX_I_V = float4x4_inverse(view);
+    g_cbuffers.cb2.MATRIX_VP = float4x4_mul(p, view);
+    g_cbuffers.cb2.WorldSpaceCameraPos =
+        float4_make(cameraPos.x, cameraPos.y, cameraPos.z, 1);
+    g_cbuffers.cb2.WorldSpaceCameraDir =
+        float4_make(cameraDir.x, cameraDir.y, cameraDir.z, 0);
+
+    {
+        Light* light = (Light*)WorldGetComponentAt(w, LightID, 0);
+        Entity lightEntity = ComponentGetEntity(w, light, LightID);
+        float3 p = TransformGetPosition(tm, w, lightEntity);
+        float3 f = TransformGetForward(tm, w, lightEntity);
+        g_cbuffers.cb3.LightPos = float4_make(p.x, p.y, p.z, 1);
+        g_cbuffers.cb3.LightDir = float4_make(-f.x, -f.y, -f.z, 0);
+    }
+
+    auto cb1 = g_CBVMemory->AllocateConstant<PerDrawUniforms>();
+    g_pCommandList->SetGraphicsRootConstantBufferView(0, cb1.GpuAddress());
+    memcpy(cb1.Memory(), &g_cbuffers.cb1, sizeof(g_cbuffers.cb1));
+
+    auto cb2 = g_CBVMemory->AllocateConstant<PerCameraUniforms>();
+    g_pCommandList->SetGraphicsRootConstantBufferView(2, cb2.GpuAddress());
+    memcpy(cb2.Memory(), &g_cbuffers.cb2, sizeof(g_cbuffers.cb2));
+
+    auto cb3 = g_CBVMemory->AllocateConstant<LightingUniforms>();
+    g_pCommandList->SetGraphicsRootConstantBufferView(3, cb3.GpuAddress());
+    memcpy(cb3.Memory(), &g_cbuffers.cb3, sizeof(g_cbuffers.cb3));
+
+    struct CB0 {
+        float4 baseColor;
+        float metallic;
+        float roughness;
+        float pad;
+        float pad2;
+        float4 emissive;
+    };
+    CB0 cb0;
+    cb0.baseColor = {1, 1, 1, 1};
+    cb0.metallic = 0;
+    cb0.roughness = 1;
+    cb0.emissive = {0, 0, 0, 1};
+    auto _cb0 = g_CBVMemory->AllocateConstant<CB0>();
+    g_pCommandList->SetGraphicsRootConstantBufferView(1, _cb0.GpuAddress());
+    memcpy(_cb0.Memory(), &cb0, sizeof(cb0));
+
     {
         D3D12_VERTEX_BUFFER_VIEW vbv = {};
         auto& b = g_Buffers[r->mesh->vb];
@@ -365,6 +779,9 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
         vbv.StrideInBytes = sizeof(Vertex);
         g_pCommandList->IASetVertexBuffers(0, 1, &vbv);
     }
+    g_pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    g_pCommandList->SetPipelineState(g_TestPSO);
+    g_pCommandList->SetGraphicsRootSignature(g_TestRootSignature.Get());
     if (r->mesh->ib != 0) {
         D3D12_INDEX_BUFFER_VIEW ibv = {};
         auto& b = g_Buffers[r->mesh->ib];
@@ -375,12 +792,12 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
             ibv.Format = DXGI_FORMAT_R16_UINT;
         ibv.SizeInBytes = b.byteLength;
         g_pCommandList->IASetIndexBuffer(&ibv);
-        // g_pCommandList->DrawIndexedInstanced(MeshGetIndexCount(r->mesh), 1,
-        // 0,
-        //                                     0, 0);
+        g_pCommandList->DrawIndexedInstanced(MeshGetIndexCount(r->mesh), 1, 0,
+                                             0, 0);
     } else {
-        // g_pCommandList->DrawInstanced(MeshGetVertexCount(r->mesh), 1, 0, 0);
+        g_pCommandList->DrawInstanced(MeshGetVertexCount(r->mesh), 1, 0, 0);
     }
+    EndRenderEvent();
     return 0;
 }
 int GPUSkinning(struct Renderable* r) { return 1; }
@@ -424,15 +841,28 @@ void FrameBegin() {
     g_pCommandList->ClearRenderTargetView(
         g_mainRenderTargetDescriptor[backBufferIdx], (float*)&clear_color, 0,
         NULL);
+    auto& depth = g_Textures[g_MainDepthRT];
+    auto depthHandle = g_DSVDescriptorHeap->GetCpuHandle(depth.dsvIndex);
+    depth.Transition(g_pCommandList, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    g_pCommandList->ClearDepthStencilView(depthHandle, D3D12_CLEAR_FLAG_DEPTH,
+                                          1, 0, 0, NULL);
     g_pCommandList->OMSetRenderTargets(
-        1, &g_mainRenderTargetDescriptor[backBufferIdx], FALSE, NULL);
+        1, &g_mainRenderTargetDescriptor[backBufferIdx], FALSE, &depthHandle);
     ID3D12DescriptorHeap* heaps[] = {g_pSrvDescHeap->Heap()};
     g_pCommandList->SetDescriptorHeaps(1, heaps);
+
+    UINT width = 1280;
+    UINT height = 800;
+    CD3DX12_VIEWPORT vp(0.f, 0.f, (float)width, (float)height);
+    g_pCommandList->RSSetViewports(1, &vp);
+    CD3DX12_RECT rect(0, 0, LONG_MAX, LONG_MAX);
+    g_pCommandList->RSSetScissorRects(1, &rect);
 }
 
 void FrameEnd() {
     {
         std::future<void> result = g_GPUResourceUploader->End(g_pCommandQueue);
+        g_CBVMemory->Commit(g_pCommandQueue);
         result.get();
         g_GPUResourceUploader->Begin();
     }
@@ -459,6 +889,8 @@ void FrameEnd() {
     auto frameCtxt = &g_frameContext[g_frameIndex % NUM_FRAMES_IN_FLIGHT];
     frameCtxt->FenceValue = fenceValue;
 }
+
+D3D12_INPUT_LAYOUT_DESC GetVerextDecl(VertexDeclHandle handle);
 
 ComPtr<ID3D12RootSignature> CreateRootSignatureFromRootParameters(
     D3D12_ROOT_PARAMETER1* rootParameters, int rootParameterCount) {
@@ -575,6 +1007,22 @@ bool CreateDeviceD3D(HWND hWnd) {
     {
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        desc.NumDescriptors = 128;
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        g_RTVDescriptorHeap =
+            new DirectX::DescriptorPile(g_Device, &desc, NUM_FRAMES_IN_FLIGHT);
+    }
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        desc.NumDescriptors = 16;
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        g_DSVDescriptorHeap = new DirectX::DescriptorPile(g_Device, &desc);
+    }
+
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         desc.NumDescriptors = 1024;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         desc.NodeMask = 1;
@@ -594,6 +1042,46 @@ bool CreateDeviceD3D(HWND hWnd) {
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         g_pSrvDescHeap = new DirectX::DescriptorPile(g_Device, &desc, 1);
         // the first one is reserved for imgui
+    }
+
+    {
+        constexpr UINT COUNT = 2048;
+        D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+        desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        desc.NumDescriptors = COUNT;
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;  // GPU visible
+        g_DynamicSrvUavDescriptorHeap = new DirectX::DescriptorPile(
+            g_Device, &desc, 1);  // 0 is used by font texture in imgui
+        desc.NumDescriptors = FE_MAX_TEXTURE_COUNT;
+        desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;  // CPU only
+        g_StaticSrvDescriptorHeap =
+            new DirectX::DescriptorPile(g_Device, &desc, NUM_FRAMES_IN_FLIGHT);
+        // reserved for back buffers
+
+        emptySRV2D =
+            g_StaticSrvDescriptorHeap->GetCpuHandle(FE_MAX_TEXTURE_COUNT - 1);
+        emptySRV3D =
+            g_StaticSrvDescriptorHeap->GetCpuHandle(FE_MAX_TEXTURE_COUNT - 2);
+        {
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+            ZeroMemory(&srvDesc, sizeof(srvDesc));
+            srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Shader4ComponentMapping =
+                D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            srvDesc.Texture2D.MipLevels = 1;
+            g_Device->CreateShaderResourceView(nullptr, &srvDesc, emptySRV2D);
+        }
+        {
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+            ZeroMemory(&srvDesc, sizeof(srvDesc));
+            srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+            srvDesc.Shader4ComponentMapping =
+                D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            srvDesc.Texture3D.MipLevels = 1;
+            g_Device->CreateShaderResourceView(nullptr, &srvDesc, emptySRV3D);
+        }
     }
 
     {
@@ -641,34 +1129,62 @@ bool CreateDeviceD3D(HWND hWnd) {
     }
 
     CreateRenderTarget();
+    g_Textures.resize(3);
+
+    RenderTextureDescriptor depthRTDesc(1280, 800,
+                                            RenderTextureFormatDepth);
+    g_MainDepthRT = InternalCreateRenderTexture(depthRTDesc);
 
     {
-        CD3DX12_ROOT_SIGNATURE_DESC desc;
         CD3DX12_ROOT_PARAMETER1 rootParameters[5];
-        rootParameters[0].InitAsConstantBufferView(0);
+        D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE;
+        D3D12_SHADER_VISIBILITY v = D3D12_SHADER_VISIBILITY_VERTEX;
+        rootParameters[0].InitAsConstantBufferView(1, 0, flags, v);
+        v = D3D12_SHADER_VISIBILITY_PIXEL;
+        rootParameters[1].InitAsConstantBufferView(0, 0, flags, v);
+        rootParameters[2].InitAsConstantBufferView(2, 0, flags, v);
+        rootParameters[3].InitAsConstantBufferView(3, 0, flags, v);
         g_TestRootSignature =
-            CreateRootSignatureFromRootParameters(rootParameters, 1);
-    }
-    {
+            CreateRootSignatureFromRootParameters(rootParameters, 4);
+
         ShaderHandle vs = CreateShaderFromCompiledFile(
             R"(E:\workspace\cengine\engine\shaders\runtime\pbrMetallicRoughness_vs.cso)");
-        ReflectShader(g_Shaders[vs], ShaderTypeVertex);
+        // ReflectShader(g_Shaders[vs], ShaderTypeVertex);
         ShaderHandle ps = CreateShaderFromCompiledFile(
             R"(E:\workspace\cengine\engine\shaders\runtime\pbrMetallicRoughness_ps.cso)");
-        ReflectShader(g_Shaders[ps], ShaderTypePixel);
+        // ReflectShader(g_Shaders[ps], ShaderTypePixel);
+
+        VertexDeclElement elements[] = {
+            {VertexAttributePosition, VertexAttributeTypeFloat, 4},
+            {VertexAttributeNormal, VertexAttributeTypeFloat, 4},
+            {VertexAttributeTangent, VertexAttributeTypeFloat, 4},
+            {VertexAttributeTexCoord0, VertexAttributeTypeFloat, 2},
+            {VertexAttributeTexCoord1, VertexAttributeTypeFloat, 2},
+        };
+        VertexDecl decl =
+            BuildVertexDeclFromElements(elements, countof(elements));
+
+        D3D12_INPUT_LAYOUT_DESC inputLayout = GetVerextDecl(decl.handle);
+        CD3DX12_BLEND_DESC blend(D3D12_DEFAULT);
+        CD3DX12_DEPTH_STENCIL_DESC depthStencil(D3D12_DEFAULT);
+        CD3DX12_RASTERIZER_DESC rasterizer(D3D12_DEFAULT);
+        rasterizer.CullMode = D3D12_CULL_MODE_FRONT;
+        auto& depth = g_Textures[g_MainDepthRT];
+        DirectX::RenderTargetState renderTarget(DXGI_FORMAT_R8G8B8A8_UNORM,
+                                                depth.format);
+        DirectX::EffectPipelineStateDescription desc(
+            &inputLayout, blend, depthStencil, rasterizer, renderTarget);
+        ID3D10Blob* vsblob = g_Shaders[vs];
+        D3D12_SHADER_BYTECODE _vs = {vsblob->GetBufferPointer(),
+                                     vsblob->GetBufferSize()};
+        ID3D10Blob* psblob = g_Shaders[ps];
+        D3D12_SHADER_BYTECODE _ps = {psblob->GetBufferPointer(),
+                                     psblob->GetBufferSize()};
+
+        desc.CreatePipelineState(g_Device, g_TestRootSignature.Get(), _vs, _ps,
+                                 &g_TestPSO);
     }
-    //{
-    //    D3D12_INPUT_LAYOUT_DESC* inputLayout = NULL;
-    //    CD3DX12_BLEND_DESC blend(D3D12_DEFAULT);
-    //    CD3DX12_DEPTH_STENCIL_DESC depthStencil(D3D12_DEFAULT);
-    //    CD3DX12_RASTERIZER_DESC rasterizer(D3D12_DEFAULT);
-    //    DirectX::RenderTargetState renderTarget;
-    //    DirectX::EffectPipelineStateDescription desc(
-    //        inputLayout, blend, depthStencil, rasterizer, renderTarget);
-    //    ID3D12PipelineState* pso = NULL;
-    //    desc.CreatePipelineState(g_Device, g_TestRootSignature.Get(), , ,
-    //    &pso);
-    //}
+
     return true;
 }
 
@@ -687,13 +1203,27 @@ void CleanupDeviceD3D() {
             g_frameContext[i].CommandAllocator->Release();
             g_frameContext[i].CommandAllocator = NULL;
         }
+    for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
+        g_Textures[i].resource = nullptr;
+    }
+    for (int i = NUM_FRAMES_IN_FLIGHT; i < g_Textures.size(); ++i) {
+        SAFE_RELEASE(g_Textures[i].resource);
+    }
     SAFE_RELEASE(g_pCommandQueue);
     SAFE_RELEASE(g_pCommandList);
+    SAFE_RELEASE(g_TestPSO);
     g_TestRootSignature.Reset();
     SAFE_DELETE(g_CBVMemory);
     SAFE_DELETE(g_GPUResourceUploader);
     SAFE_DELETE(g_pRtvDescHeap);
     SAFE_DELETE(g_pSrvDescHeap);
+    SAFE_DELETE(g_RTVDescriptorHeap);
+    SAFE_DELETE(g_DSVDescriptorHeap);
+    SAFE_DELETE(g_StaticSamplerDescriptorHeap);
+    SAFE_DELETE(g_StaticSrvDescriptorHeap);
+    SAFE_DELETE(g_StaticUavDescriptorHeap);
+    SAFE_DELETE(g_DynamicSrvUavDescriptorHeap);
+    SAFE_DELETE(g_DynamicSamplerDescriptorHeap);
     SAFE_RELEASE(g_fence);
     if (g_fenceEvent) {
         CloseHandle(g_fenceEvent);

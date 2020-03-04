@@ -90,55 +90,11 @@ static inline uint32_t TransformGetParent(SingletonTransformManager *tm,
     return tm->H[child].parent;
 }
 
-static inline void TransformSetParent(SingletonTransformManager *tm,
-                                      uint32_t child, uint32_t newParent) {
-    uint32_t parent = tm->H[child].parent;
-    if (parent == newParent) return;
+void TransformSetParent(SingletonTransformManager *tm, uint32_t child,
+                        uint32_t newParent);
 
-    // detach from the old parent
-    uint32_t p = tm->H[parent].firstChild;
-    if (p == child)  // is the first child
-    {
-        tm->H[parent].firstChild = tm->H[child].nextSibling;
-    } else if (parent != 0) {
-        while (tm->H[p].nextSibling != child) {
-            p = tm->H[p].nextSibling;
-        }
-        tm->H[p].nextSibling = tm->H[child].nextSibling;
-    }
-
-    tm->H[child].nextSibling = tm->H[newParent].firstChild;
-    tm->H[newParent].firstChild = child;
-    tm->H[child].parent = newParent;
-    TransformSetDirty(tm, child);
-}
-
-static inline void TransformUpdateLocalToWorldMatrix(
-    SingletonTransformManager *tm, World *w, uint32_t idx) {
-    float4x4 *l2w = &tm->LocalToWorld[idx];
-    Transform *t = TransformGet(w, idx);
-    uint32_t parent = TransformGetParent(tm, idx);
-    if (parent != 0) {
-        TransformUpdateLocalToWorldMatrix(tm, w,
-                                          parent);  // update parent's l2w
-        if (tm->H[idx].modified <
-                tm->H[parent].modified ||  // parent is modified after child
-            !tm->H[idx]
-                 .localNotDirty)  // child self is modified, so update its l2w
-        {
-            *l2w = TransformTRS(t);
-            float4x4 *parentL2W = &tm->LocalToWorld[parent];
-            *l2w = float4x4_mul(*parentL2W, *l2w);
-            if (tm->H[idx].modified < tm->H[parent].modified)
-                tm->H[idx].modified = tm->H[parent].modified;
-        }
-    } else {  // has no parent
-        if (!tm->H[idx].localNotDirty) {
-            *l2w = TransformTRS(t);
-        }
-    }
-    tm->H[idx].localNotDirty = true;
-}
+void TransformUpdateLocalToWorldMatrix(SingletonTransformManager *tm, World *w,
+                                       uint32_t idx);
 
 static inline float4x4 TransformGetLocalToWorldMatrix(
     SingletonTransformManager *tm, World *w, uint32_t idx) {

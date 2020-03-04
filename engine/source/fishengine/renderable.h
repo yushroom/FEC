@@ -8,7 +8,7 @@ struct Renderable {
     Mesh *mesh;
     Material *material;
     Skin *skin;
-
+    uint32_t bonesBuffer;
     //    array bones;  // vector<float4x4>;
 };
 typedef struct Renderable Renderable;

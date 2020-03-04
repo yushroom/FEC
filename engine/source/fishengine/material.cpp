@@ -263,6 +263,7 @@ Memory MaterialBuildGloblsCB(Material *mat) {
     mem.byteLength = impl->m_PSGlobals.size();
 
     for (auto &m : reflect.ps.globals.members) {
+        if (!m.used) continue;
         if (m.type == "float") {
             float v = MaterialGetFloat(mat, m.nameID);
             float *ptr = (float *)((uint8_t *)mem.buffer + m.offset);

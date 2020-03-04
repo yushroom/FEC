@@ -1,22 +1,24 @@
 struct SVertInVBO
 {
-    float3 pos;
-    float2 uv;
-    float3 norm;
+    float4 pos;
+    float4 norm;
     float4 tang;
+	float4 uv0uv1;
+//	packed_float2 uv0;
+//	packed_float2 uv1;
 };
 
 struct SVertInSkin
 {
-	uint4 index;
-	float4 weight;
+    uint4 index;
+    float4 weight;
 };
 
-uint							g_VertCount		: register(b0);
-StructuredBuffer<SVertInVBO>	g_SourceVBO		: register(t0);
-StructuredBuffer<SVertInSkin>	g_SourceSkin	: register(t1);
-StructuredBuffer<float4x4>		g_Bones			: register(t2);
-RWStructuredBuffer<SVertInVBO>	g_MeshVertsOut	: register(u0);
+uint g_VertCount;
+StructuredBuffer<SVertInVBO> g_SourceVBO;
+StructuredBuffer<SVertInSkin> g_SourceSkin;
+RWStructuredBuffer<SVertInVBO> g_MeshVertsOut;
+StructuredBuffer<float4x4> g_mBones;
 
 #define NR_THREADS  64
 
@@ -30,13 +32,15 @@ void CS(uint3 threadID : SV_DispatchThreadID)
         return;
     }
     SVertInSkin skin = g_SourceSkin[t];
-    float4x4 skinMatrix = skin.weight.x * g_Bones[skin.index.x];
-    skinMatrix += skin.weight.y * g_Bones[skin.index.y];
-    skinMatrix += skin.weight.z * g_Bones[skin.index.z];
-    skinMatrix += skin.weight.w * g_Bones[skin.index.w];
+    float4x4 skinMatrix = skin.weight.x * g_mBones[skin.index.x];
+    skinMatrix += skin.weight.y * g_mBones[skin.index.y];
+    skinMatrix += skin.weight.z * g_mBones[skin.index.z];
+    skinMatrix += skin.weight.w * g_mBones[skin.index.w];
     SVertInVBO vert = g_SourceVBO[t];
-    float4 pos =  mul( float4(vert.pos, 1), skinMatrix );
-    g_MeshVertsOut[t].pos = pos.xyz/pos.w;
-    float4 normal =  mul( float4(vert.norm, 0), skinMatrix );
-    g_MeshVertsOut[t].norm = normal.xyz;
+    float4 pos =  mul( skinMatrix, float4(vert.pos.xyz, 1) );
+    g_MeshVertsOut[t].pos = pos/pos.w;
+    float4 normal =  mul( skinMatrix, float4(vert.norm.xyz, 0) );
+    g_MeshVertsOut[t].norm = normal;
+    g_MeshVertsOut[t].tang = vert.tang;
+	g_MeshVertsOut[t].uv0uv1 = vert.uv0uv1;
 }

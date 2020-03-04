@@ -9,23 +9,33 @@ def reflect(input, output):
     input = os.path.abspath(input)
     cmd = f'""{hlslreflect}" {input} > {output}"'
     print(cmd)
-    os.system(cmd)
+    return os.system(cmd)
 
-for f in glob.glob("*.hlsl"):
-    basename = os.path.splitext(os.path.basename(f))[0]
-    print(f)
-    output = f"runtime\\{basename}_vs.cso"
-    cmd = f'""{fxc}" {f} /nologo /I .\\include /E VS /T vs_5_1 -Fo {output}"'
-    os.system(cmd)
+def basename(path:str):
+    return os.path.splitext(os.path.basename(path))[0]
+
+def CompileAndReflect(path:str, shaderType:str):
+    print(f, shaderType)
+    assert(shaderType in ['vs', 'ps', 'cs'])
+    fn = basename(f)
+
+    st = shaderType.lower()
+    ST = shaderType.upper()
+    output = f"runtime\\{fn}_{st}.cso"
+    cmd = f'""{fxc}" {f} /nologo /I .\\include /E {ST} /T {st}_5_1 -Fo {output}"'
+    ret = os.system(cmd)
+    if ret != 0:
+        return
 
     input = output
-    output = f"runtime\\{basename}_vs.reflect.json"
-    reflect(input, output)
+    output = f"runtime\\{fn}_{st}.reflect.json"
+    ret = reflect(input, output)
+    return ret
 
-    output = f"runtime\\{basename}_ps.cso"
-    cmd = f'""{fxc}" {f} /nologo /I .\\include /E PS /T ps_5_1 -Fo {output}"'
-    os.system(cmd)
+if __name__ == "__main__":
+    # for f in glob.glob("*.hlsl"):
+    #     CompileAndReflect(f, 'vs')
+    #     CompileAndReflect(f, 'ps')
 
-    input = output
-    output = f"runtime\\{basename}_ps.reflect.json"
-    reflect(input, output)
+    for f in glob.glob("*.comp"):
+        CompileAndReflect(f, 'cs')

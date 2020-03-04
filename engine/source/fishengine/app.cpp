@@ -14,11 +14,11 @@
 #include "transform.h"
 
 extern "C" {
-void hierarchy(World *w);
-void inspector(World *w);
-void assets_window();
-void statistics_window(World *w, JSRuntime *rt);
-void console_window();
+void HierarchyWindow(World *w);
+void InspectorWindow(World *w);
+void AssetWindow();
+void StatisticsWindow(World *w, JSRuntime *rt);
+void ConsoleWindow();
 void open_file_by_callstack(const uint8_t *callstack);
 }
 
@@ -58,15 +58,17 @@ void hierarchy_impl(uint32_t id) {
 }
 
 constexpr float width = 200;
+constexpr float toolbarHeight = 40;
 
-void hierarchy(World *w) {
+void HierarchyWindow(World *w) {
     tm = (SingletonTransformManager *)WorldGetSingletonComponent(
         w, SingletonTransformManagerID);
     world = w;
 
     auto size = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowSize(ImVec2(width, size.y / 2));
-    ImGui::SetNextWindowPos(ImVec2(size.x - width, 40));
+    float height = (size.y - toolbarHeight) / 2;
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+    ImGui::SetNextWindowPos(ImVec2(size.x - width, toolbarHeight));
     ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 8);
     ImGui::Begin("Hierarchy");
     for (int i = 1; i < w->componentArrays[TransformID].m.size; ++i) {
@@ -163,9 +165,9 @@ struct FEImGuiStyle {
 
 struct FEImGuiStyle g_style;
 
-void toolbar(World *world) {
+void Toolbar(World *world) {
     auto size = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowSize(ImVec2(size.x, 40));
+    ImGui::SetNextWindowSize(ImVec2(size.x, toolbarHeight));
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     const ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoNav |
@@ -218,13 +220,13 @@ static bool inspector_debug_mode = false;
 
 #include "shader_util.h"
 
-void inspector(World *w) {
-    toolbar(w);
+void InspectorWindow(World *w) {
+    Toolbar(w);
     //    if (selectedEntity >= w->entityCount) return;
     auto size = ImGui::GetIO().DisplaySize;
-    size.y -= 40;
-    ImGui::SetNextWindowSize(ImVec2(width, size.y / 2));
-    ImGui::SetNextWindowPos(ImVec2(size.x - width, 40 + size.y / 2));
+    float height = (size.y - toolbarHeight) / 2;
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+    ImGui::SetNextWindowPos(ImVec2(size.x - width, size.y - height));
     ImGui::Begin("Inspector");
 
     ImGui::Checkbox("debug", &inspector_debug_mode);
@@ -301,7 +303,7 @@ void inspector(World *w) {
                             int nameID = ShaderPropertyToID(name);
                             float4 v = MaterialGetVector(m, nameID);
                             float c[4] = {v.x, v.y, v.z, v.w};
-                            if (ImGui::ColorEdit4("baseColor", c)) {
+                            if (ImGui::ColorEdit4(name, c)) {
                                 MaterialSetVector(
                                     m, nameID,
                                     float4_make(c[0], c[1], c[2], c[3]));
@@ -324,7 +326,7 @@ void inspector(World *w) {
     ImGui::End();
 }
 
-void assets_window() {
+void AssetWindow() {
     auto size = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowSize(ImVec2(size.x - width, 200));
     ImGui::SetNextWindowPos(ImVec2(0, size.y - 200));
@@ -352,7 +354,7 @@ void assets_window() {
 
 static inline float MB(uint32_t s) { return 1.0f * s / (1024 * 1024); }
 
-void statistics_window(World *w, JSRuntime *rt) {
+void StatisticsWindow(World *w, JSRuntime *rt) {
     ImGui::Begin("Statistics");
 
     ImGui::Text("%s", "GPU");
@@ -400,7 +402,7 @@ void statistics_window(World *w, JSRuntime *rt) {
     ImGui::End();
 }
 
-void console_window() {
+void ConsoleWindow() {
     if (!debug_has_error()) return;
 
     ImGui::Begin("Console");

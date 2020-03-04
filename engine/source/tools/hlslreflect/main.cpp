@@ -121,7 +121,7 @@ static ShaderReflectShader ReflectShader(ID3D10Blob* shader, ShaderType shaderTy
     }
 
     if constexpr (printMsg) LogInfo(">>>Output:\n");
-    for (UINT i = 0; i < desc.InputParameters; ++i) {
+    for (UINT i = 0; i < desc.OutputParameters; ++i) {
         D3D12_SIGNATURE_PARAMETER_DESC spd;
         pReflector->GetOutputParameterDesc(i, &spd);
         if constexpr (printMsg)

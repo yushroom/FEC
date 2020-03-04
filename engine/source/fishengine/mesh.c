@@ -160,6 +160,7 @@ void MeshSetVertices(Mesh *m, enum VertexAttr attr, void *buffer, int count,
 }
 
 void MeshUploadMeshData(Mesh *m) {
+    bool skinned = (m->boneWeights.size != 0);
     if (m->triangles.size != 0) {
         Memory memory = {.buffer = m->triangles.ptr,
                          .byteLength = array_get_bytelength(&m->triangles)};
@@ -174,12 +175,15 @@ void MeshUploadMeshData(Mesh *m) {
         //		}
         Memory memory = {.buffer = m->vertices.ptr,
                          .byteLength = array_get_bytelength(&m->vertices)};
-        m->vb = CreateBuffer(memory, GPUResourceUsageVertexBuffer);
+        int flag = GPUResourceUsageVertexBuffer;
+        if (skinned) flag |= GPUResourceUsageShaderResource;
+        m->vb = CreateBuffer(memory, flag);
     }
     if (m->boneWeights.size != 0) {
         Memory memory = {.buffer = m->boneWeights.ptr,
                          .byteLength = array_get_bytelength(&m->boneWeights)};
-        m->sb = CreateBuffer(memory, GPUResourceUsageVertexBuffer);
+        m->sb = CreateBuffer(memory, GPUResourceUsageVertexBuffer |
+                                         GPUResourceUsageShaderResource);
     }
 }
 

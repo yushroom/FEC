@@ -94,7 +94,7 @@ struct StatedD3D12Resource {
 
     void Transition(ID3D12GraphicsCommandList* cmdList,
                     D3D12_RESOURCE_STATES targetState) {
-        if (state != targetState) {
+        if ((state | targetState) != state) {
             DirectX::TransitionResource(cmdList, resource, state, targetState);
             state = targetState;
         }
@@ -165,8 +165,9 @@ void EndRenderEvent() { PIXEndEvent(g_pCommandList); }
 
 static ID3D12Resource* InternalCreateBuffer(uint32_t byteSize, int bufferUsage,
                                             D3D12_RESOURCE_STATES initState) {
-    assert(bufferUsage == 0 ||
-           bufferUsage == D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+    constexpr int _usage =
+        GPUResourceUsageUnorderedAccess | GPUResourceUsageShaderResource;
+    assert((bufferUsage | _usage) == _usage);
     ID3D12Resource* ret = nullptr;
     D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
     if (bufferUsage & GPUResourceUsageUnorderedAccess)
@@ -421,6 +422,8 @@ struct RenderTextureDescriptor {
           colorFormat(colorFormat),
           depthBufferBits(depthBufferBits) {}
 
+    int width = 1;
+    int height = 1;
     // RenderTextureCreationFlags flags = (RenderTextureCreationFlags)0;
     bool autoGenerateMips = false;
     bool useMipmap = false;
@@ -428,11 +431,9 @@ struct RenderTextureDescriptor {
     bool enableRandomWrite = false;
     int msaaSamples = 1;
     TextureDimension dimension = TextureDimensionTex2D;
-    int depthBufferBits = 24;  // 0, 16, 24
     RenderTextureFormat colorFormat = RenderTextureFormatARGB32;
-    int height = 1;
-    int width = 1;
-    int volumeDepth = 1;  // 1~2000
+    int volumeDepth = 1;       // 1~2000
+    int depthBufferBits = 24;  // 0, 16, 24
 
     RenderTextureCreationFlags flags() const {
         RenderTextureCreationFlags f = RenderTextureCreationFlags(0);
@@ -673,7 +674,7 @@ extern World* defaultWorld;
 struct Renderable;
 // struct Transform;
 int SimpleDraw(Transform* t, struct Renderable* r) {
-    if (!t || !r || !r->mesh) return 0;
+    if (!t || !r || !r->mesh || !r->material) return 0;
 
     BeginRenderEvent("SimpleDraw");
     g_pCommandList->SetGraphicsRootSignature(g_TestRootSignature.Get());
@@ -754,26 +755,21 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
     g_pCommandList->SetGraphicsRootConstantBufferView(3, cb3.GpuAddress());
     memcpy(cb3.Memory(), &g_cbuffers.cb3, sizeof(g_cbuffers.cb3));
 
-    struct CB0 {
-        float4 baseColor;
-        float metallic;
-        float roughness;
-        float pad;
-        float pad2;
-        float4 emissive;
-    };
-    CB0 cb0;
-    cb0.baseColor = {1, 1, 1, 1};
-    cb0.metallic = 0;
-    cb0.roughness = 1;
-    cb0.emissive = {0, 0, 0, 1};
-    auto _cb0 = g_CBVMemory->AllocateConstant<CB0>();
+    Memory ps_cb0 = MaterialBuildGloblsCB(r->material);
+    auto _cb0 = g_CBVMemory->Allocate(
+        ps_cb0.byteLength, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+    memcpy(_cb0.Memory(), ps_cb0.buffer, ps_cb0.byteLength);
     g_pCommandList->SetGraphicsRootConstantBufferView(1, _cb0.GpuAddress());
-    memcpy(_cb0.Memory(), &cb0, sizeof(cb0));
 
+    BufferHandle vbHandle = r->mesh->vb;
+    if (r->skin && (r->mesh->sb != 0) && (r->mesh->skinnedvb != 0)) {
+        vbHandle = r->mesh->skinnedvb;
+    }
     {
         D3D12_VERTEX_BUFFER_VIEW vbv = {};
-        auto& b = g_Buffers[r->mesh->vb];
+        auto& b = g_Buffers[vbHandle];
+        b.Transition(g_pCommandList,
+                     D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
         vbv.BufferLocation = b.resource->GetGPUVirtualAddress();
         vbv.SizeInBytes = b.byteLength;
         vbv.StrideInBytes = sizeof(Vertex);
@@ -800,7 +796,7 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
     EndRenderEvent();
     return 0;
 }
-int GPUSkinning(struct Renderable* r) { return 1; }
+
 void BeginPass() {}
 
 bool CreateDeviceD3D(HWND hWnd);
@@ -1131,8 +1127,7 @@ bool CreateDeviceD3D(HWND hWnd) {
     CreateRenderTarget();
     g_Textures.resize(3);
 
-    RenderTextureDescriptor depthRTDesc(1280, 800,
-                                            RenderTextureFormatDepth);
+    RenderTextureDescriptor depthRTDesc(1280, 800, RenderTextureFormatDepth);
     g_MainDepthRT = InternalCreateRenderTexture(depthRTDesc);
 
     {
@@ -1186,58 +1181,6 @@ bool CreateDeviceD3D(HWND hWnd) {
     }
 
     return true;
-}
-
-void CleanupDeviceD3D() {
-    { g_GPUResourceUploader->End(g_pCommandQueue); }
-    for (auto& b : g_Buffers) {
-        SAFE_RELEASE(b.resource);
-    }
-    CleanupRenderTarget();
-    SAFE_RELEASE(g_pSwapChain);
-    if (g_hSwapChainWaitableObject != NULL) {
-        CloseHandle(g_hSwapChainWaitableObject);
-    }
-    for (UINT i = 0; i < NUM_FRAMES_IN_FLIGHT; i++)
-        if (g_frameContext[i].CommandAllocator) {
-            g_frameContext[i].CommandAllocator->Release();
-            g_frameContext[i].CommandAllocator = NULL;
-        }
-    for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
-        g_Textures[i].resource = nullptr;
-    }
-    for (int i = NUM_FRAMES_IN_FLIGHT; i < g_Textures.size(); ++i) {
-        SAFE_RELEASE(g_Textures[i].resource);
-    }
-    SAFE_RELEASE(g_pCommandQueue);
-    SAFE_RELEASE(g_pCommandList);
-    SAFE_RELEASE(g_TestPSO);
-    g_TestRootSignature.Reset();
-    SAFE_DELETE(g_CBVMemory);
-    SAFE_DELETE(g_GPUResourceUploader);
-    SAFE_DELETE(g_pRtvDescHeap);
-    SAFE_DELETE(g_pSrvDescHeap);
-    SAFE_DELETE(g_RTVDescriptorHeap);
-    SAFE_DELETE(g_DSVDescriptorHeap);
-    SAFE_DELETE(g_StaticSamplerDescriptorHeap);
-    SAFE_DELETE(g_StaticSrvDescriptorHeap);
-    SAFE_DELETE(g_StaticUavDescriptorHeap);
-    SAFE_DELETE(g_DynamicSrvUavDescriptorHeap);
-    SAFE_DELETE(g_DynamicSamplerDescriptorHeap);
-    SAFE_RELEASE(g_fence);
-    if (g_fenceEvent) {
-        CloseHandle(g_fenceEvent);
-        g_fenceEvent = NULL;
-    }
-    SAFE_RELEASE(g_Device);
-
-#ifdef DX12_ENABLE_DEBUG_LAYER
-    IDXGIDebug1* pDebug = NULL;
-    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&pDebug)))) {
-        pDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_SUMMARY);
-        pDebug->Release();
-    }
-#endif
 }
 
 void CreateRenderTarget() {
@@ -1318,4 +1261,189 @@ void ResizeSwapChain(HWND hWnd, int width, int height) {
 
     g_hSwapChainWaitableObject = g_pSwapChain->GetFrameLatencyWaitableObject();
     assert(g_hSwapChainWaitableObject != NULL);
+}
+
+struct ComputeShader {
+    static ComputeShader* Find(const char* name);
+
+    struct Kernel {
+        std::string name;
+        ShaderHandle handle;
+        // ShaderUniformSignature signature;
+    };
+    std::vector<Kernel> m_Kernels;
+    std::string m_Name;
+};
+
+ComputeShader* ComputeShader::Find(const char* name) {
+    ComputeShader* s = new ComputeShader;
+    s->m_Name = name;
+    s->m_Kernels.emplace_back();
+    std::string path =
+        R"(E:\workspace\cengine\engine\shaders\runtime\Internal-Skinning_cs.cso)";
+    s->m_Kernels[0].handle = CreateShaderFromCompiledFile(path.c_str());
+    return s;
+}
+
+inline D3D12_SHADER_BYTECODE TranslateS(ShaderHandle handle) {
+    ID3D10Blob* blob = g_Shaders[handle];
+    return {blob->GetBufferPointer(), blob->GetBufferSize()};
+}
+
+struct GPUSkinningPass {
+    ComPtr<ID3D12RootSignature> rootSignature;
+    ComputeShader* shader = nullptr;
+    ComPtr<ID3D12PipelineState> pso;
+
+    ~GPUSkinningPass() { Clean(); }
+
+    void Clean() {
+        rootSignature.Reset();
+        pso.Reset();
+        SAFE_DELETE(shader);
+        init = false;
+    }
+
+    bool init = false;
+    void Init() {
+        if (init) return;
+        shader = ComputeShader::Find("Internal-Skinning");
+
+        CD3DX12_ROOT_PARAMETER1 rootParameters[5];
+        rootParameters[0].InitAsConstants(1, 0);
+        rootParameters[1].InitAsShaderResourceView(0);
+        rootParameters[2].InitAsShaderResourceView(1);
+        rootParameters[3].InitAsShaderResourceView(2);
+        rootParameters[4].InitAsUnorderedAccessView(0);
+        rootSignature =
+            CreateRootSignatureFromRootParameters(rootParameters, 5);
+
+        D3D12_COMPUTE_PIPELINE_STATE_DESC desc;
+        memset(&desc, 0, sizeof(D3D12_COMPUTE_PIPELINE_STATE_DESC));
+        desc.pRootSignature = rootSignature.Get();
+        desc.CS = TranslateS(shader->m_Kernels[0].handle);
+        desc.NodeMask = 0;
+        desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        HRESULT hr =
+            g_Device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pso));
+        assert(SUCCEEDED(hr));
+        init = true;
+    }
+};
+
+GPUSkinningPass g_GPUSkinningPass;
+
+inline ID3D12Resource* Translate(BufferHandle handle) {
+    return g_Buffers[handle].resource;
+}
+
+int GPUSkinning(Renderable* r) {
+    BeginRenderEvent("GPUSkinning");
+    g_GPUSkinningPass.Init();
+    assert(r && r->skin && r->mesh);
+    if (!(r && r->skin && r->mesh)) return 1;
+    Mesh* mesh = r->mesh;
+    auto& skinnedVB = mesh->skinnedvb;
+    auto VB = mesh->vb;
+    auto skin = mesh->sb;
+    auto& bones = r->bonesBuffer;
+    if (skinnedVB == 0) {
+        Memory m = {};
+        m.byteLength = array_get_bytelength(&r->mesh->vertices);
+        skinnedVB = CreateBuffer(m, GPUResourceUsageUnorderedAccess);
+    }
+    {
+        Memory m = {};
+        m.buffer = r->skin->boneMats.ptr;
+        m.byteLength = array_get_bytelength(&r->skin->boneMats);
+        if (bones == 0)
+            bones = CreateBuffer(m, GPUResourceUsageShaderResource);
+        else
+            InternalUpdateBuffer(g_Buffers[bones].resource,
+                                 g_Buffers[bones].state, m);
+    }
+
+    uint32_t vertexCount = MeshGetVertexCount(mesh);
+
+    g_Buffers[VB].Transition(
+        g_pCommandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE |
+                            D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+    g_Buffers[skin].Transition(g_pCommandList,
+                               D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    g_Buffers[bones].Transition(g_pCommandList,
+                                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    g_Buffers[skinnedVB].Transition(g_pCommandList,
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    g_GPUSkinningPass.Init();
+    g_pCommandList->SetPipelineState(g_GPUSkinningPass.pso.Get());
+    g_pCommandList->SetComputeRootSignature(
+        g_GPUSkinningPass.rootSignature.Get());
+    g_pCommandList->SetComputeRoot32BitConstant(0, vertexCount, 0);
+    g_pCommandList->SetComputeRootShaderResourceView(
+        1, g_Buffers[r->mesh->vb].resource->GetGPUVirtualAddress());
+    g_pCommandList->SetComputeRootShaderResourceView(
+        2, Translate(skin)->GetGPUVirtualAddress());
+    g_pCommandList->SetComputeRootShaderResourceView(
+        3, Translate(bones)->GetGPUVirtualAddress());
+    g_pCommandList->SetComputeRootUnorderedAccessView(
+        4, Translate(skinnedVB)->GetGPUVirtualAddress());
+    UINT x = static_cast<UINT>(std::ceil(vertexCount / 64.0f));
+    g_pCommandList->Dispatch(x, 1, 1);
+    EndRenderEvent();
+    return 0;
+}
+
+
+void CleanupDeviceD3D() {
+    { g_GPUResourceUploader->End(g_pCommandQueue); }
+    g_GPUSkinningPass.Clean();
+    for (auto& b : g_Buffers) {
+        SAFE_RELEASE(b.resource);
+    }
+    CleanupRenderTarget();
+    SAFE_RELEASE(g_pSwapChain);
+    if (g_hSwapChainWaitableObject != NULL) {
+        CloseHandle(g_hSwapChainWaitableObject);
+    }
+    for (UINT i = 0; i < NUM_FRAMES_IN_FLIGHT; i++)
+        if (g_frameContext[i].CommandAllocator) {
+            g_frameContext[i].CommandAllocator->Release();
+            g_frameContext[i].CommandAllocator = NULL;
+        }
+    for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
+        g_Textures[i].resource = nullptr;
+    }
+    for (int i = NUM_FRAMES_IN_FLIGHT; i < g_Textures.size(); ++i) {
+        SAFE_RELEASE(g_Textures[i].resource);
+    }
+    SAFE_RELEASE(g_pCommandQueue);
+    SAFE_RELEASE(g_pCommandList);
+    SAFE_RELEASE(g_TestPSO);
+    g_TestRootSignature.Reset();
+    SAFE_DELETE(g_CBVMemory);
+    SAFE_DELETE(g_GPUResourceUploader);
+    SAFE_DELETE(g_pRtvDescHeap);
+    SAFE_DELETE(g_pSrvDescHeap);
+    SAFE_DELETE(g_RTVDescriptorHeap);
+    SAFE_DELETE(g_DSVDescriptorHeap);
+    SAFE_DELETE(g_StaticSamplerDescriptorHeap);
+    SAFE_DELETE(g_StaticSrvDescriptorHeap);
+    SAFE_DELETE(g_StaticUavDescriptorHeap);
+    SAFE_DELETE(g_DynamicSrvUavDescriptorHeap);
+    SAFE_DELETE(g_DynamicSamplerDescriptorHeap);
+    SAFE_RELEASE(g_fence);
+    if (g_fenceEvent) {
+        CloseHandle(g_fenceEvent);
+        g_fenceEvent = NULL;
+    }
+    SAFE_RELEASE(g_Device);
+
+#ifdef DX12_ENABLE_DEBUG_LAYER
+    IDXGIDebug1* pDebug = NULL;
+    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&pDebug)))) {
+        pDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_SUMMARY);
+        pDebug->Release();
+    }
+#endif
 }

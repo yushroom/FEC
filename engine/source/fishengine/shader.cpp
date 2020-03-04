@@ -127,7 +127,7 @@ static void LoadShaderReflectItemFromJSON(const std::string& json_path,
             u.binding = ubo["binding"].GetUint();
             mask |= (1 << u.binding);
             item.ubos.push_back(u);
-            if (u.name == "type__Globals") {
+            if (u.name == "type__Globals" || u.name == "$Globals") {
                 globals_type = u.type;
                 item.globals.block_size = u.block_size;
             }

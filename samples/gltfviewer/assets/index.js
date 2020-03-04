@@ -206,7 +206,7 @@ function LoadglTF(path)
         print(`materials: ${duck.materials.length}, meshes: ${duck.meshes[0].primitives.length}`);
         for (let m of duck.materials) {
             let mat = new fe.Material();
-            //mat.SetShader(pbrMetallicRoughness);
+            mat.SetShader(pbrMetallicRoughness);
             if ('pbrMetallicRoughness' in m) {
                 if ('baseColorTexture' in m.pbrMetallicRoughness) {
                     const tid = m.pbrMetallicRoughness.baseColorTexture.index;

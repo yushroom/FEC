@@ -438,18 +438,18 @@ int app_update() {
     return 0;
 }
 
-void hierarchy(World *w);
-void inspector(World *w);
-void assets_window();
-void console_window();
-void statistics_window(World *w, JSRuntime *rt);
+void HierarchyWindow(World *w);
+void InspectorWindow(World *w);
+void AssetWindow();
+void ConsoleWindow();
+void StatisticsWindow(World *w, JSRuntime *rt);
 
 int app_render_ui() {
-    hierarchy(w);
-    inspector(w);
-    assets_window();
-    statistics_window(w, rt);
-    console_window();
+    HierarchyWindow(w);
+    InspectorWindow(w);
+    AssetWindow();
+    StatisticsWindow(w, rt);
+    ConsoleWindow();
 
     if (1) {
         JSValue global_obj = JS_GetGlobalObject(ctx);

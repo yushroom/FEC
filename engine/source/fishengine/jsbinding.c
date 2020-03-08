@@ -247,18 +247,9 @@ static JSValue js_fe_render_ConvertTexture(JSContext *ctx,
                                            JSValueConst *argv) {
     if (argc < 1) return JS_EXCEPTION;
     const char *path = JS_ToCString(ctx, argv[0]);
-    char *p = path;
-    for (int i = 0; i < strlen(path); ++i, ++p) {
-        if (*p == '/') *p = '\\';
-    }
-    char cmdbuf[2048];
-    snprintf(cmdbuf, 2048,
-             "E:\\workspace\\cengine\\engine\\binaries\\nvcompress -bc1 "
-             "\"%s\"",
-             path);
+    bool ret = ConvertToDDS(path);
     JS_FreeCString(ctx, path);
-    int ret = system(cmdbuf);
-    return JS_NewInt32(ctx, ret);
+    return JS_NewBool(ctx, ret);
 }
 
 static JSValue js_fe_reload(JSContext *ctx, JSValueConst this_value, int argc,

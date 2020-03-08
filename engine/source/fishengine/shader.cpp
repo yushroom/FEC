@@ -5,7 +5,9 @@
 #include <vector>
 
 #include "asset.h"
-#include "shader_reflect.hpp"
+#include "shader_internal.hpp"
+#include "shader_util.h"
+#include <fmt/format.h>
 
 class NonCopyable {
    public:
@@ -64,15 +66,15 @@ Shader* ShaderNew() {
     Shader* s = (Shader*)malloc(sizeof(Shader));
     memset(s, 0, sizeof(Shader));
     AssetAdd(AssetTypeShader, s);
-    s->reflect = new ShaderReflect();
+    s->impl = new ShaderImpl();
     return s;
 }
 
 void ShaderFree(void* s) {
     if (!s) return;
     Shader* shader = (Shader*)s;
-    ShaderReflect* r = (ShaderReflect*)shader->reflect;
-    delete r;
+    auto impl = (ShaderImpl*)shader->impl;
+    delete impl;
     free(s);
 }
 
@@ -108,11 +110,11 @@ bool ReadBinaryFile(const std::string& path, std::vector<char>& bin) {
     return true;
 }
 
-static void LoadShaderReflectItemFromJSON(const std::string& json_path,
-                                          ShaderReflectItem& item) {
+static void LoadShaderReflectItemFromMemory(Memory json,
+                                            ShaderReflectItem& item) {
     rapidjson::Document d;
-    auto json = ReadFileAsString(json_path);
-    auto& root = d.Parse(json.c_str());
+    const char* str = (const char*)json.buffer;
+    auto& root = d.Parse(str, json.byteLength);
     std::string globals_type;
     uint32_t mask = 0;
     if (root.HasMember("ubos")) {
@@ -180,47 +182,88 @@ static void LoadShaderReflectItemFromJSON(const std::string& json_path,
     }
 }
 
+static void LoadShaderReflectItemFromFile(const std::string& json_path,
+                                          ShaderReflectItem& item) {
+    auto json = ReadFileAsString(json_path);
+    LoadShaderReflectItemFromMemory(
+        MemoryMake((void*)json.c_str(), json.size()), item);
+}
+
+ShaderHandle CreateShaderFromCompiledFile(const char* path);
+
 Shader* ShaderFromFile(const char* path) {
     Shader* s = ShaderNew();
+    ShaderImpl* impl = (ShaderImpl*)s->impl;
 
-    fs::path p = path;
-    std::string vs_name = p.stem().string() + "_vs";
-    std::string ps_name = p.stem().string() + "_ps";
-    const std::string vs_path = vs_name + ".reflect.json";
-    const std::string ps_path = ps_name + ".reflect.json";
+    {
+        rapidjson::Document d;
+        std::string json_path = path;
+        json_path += ".json";
+        std::string str = ReadFileAsString(json_path);
+        auto &root = d.Parse(str.c_str(), str.length());
+        for (auto& kw : root["keywords"].GetArray()) {
+            impl->keywords.push_back(kw.GetString());
+        }
 
-    //    const char* vs_path =
-    //        "/Users/yushroom/program/cengine/engine/shaders/runtime/"
-    //        "pbrMetallicRoughness_vs.reflect.json";
-    //    const char* ps_path =
-    //        "/Users/yushroom/program/cengine/engine/shaders/runtime/"
-    //        "pbrMetallicRoughness_ps.reflect.json";
+        impl->properties.reserve(root["properties"].GetArray().Size());
+        for (auto& p : root["properties"].GetArray()) {
+            auto& _p = impl->properties.emplace_back();
+            _p.name = p["name"].GetString();
+            std::string type = p["type"].GetString();
+            if (type == "Color") {
+                _p.type = ShaderPropertyTypeVector;
+            } else if (type == "Range") {
+                _p.type = ShaderPropertyTypeFloat;
+            } else if (type == "2D") {
+                _p.type = ShaderPropertyTypeTexture;
+            }
+        }
+        
+        int passIdx = 0;
+        s->passCount = root["passes"].GetArray().Size();
+        for (auto& p : root["passes"].GetArray()) {
+            auto& sp = impl->passes.emplace_back();
+            uint32_t variantCount = 1;
+            for (auto& mc : p["multi_compiles"].GetArray()) {
+                auto& _mc = sp.multiCompiles.emplace_back();
+                for (auto& x : mc.GetArray()) {
+                    _mc.push_back(x.GetString());
+                }
+                variantCount *= mc.GetArray().Size();
+            }
 
-    ShaderReflect& reflect = ShaderGetReflect(s);
-    LoadShaderReflectItemFromJSON(vs_path, reflect.vs);
-    LoadShaderReflectItemFromJSON(ps_path, reflect.ps);
+            sp.variants.resize(variantCount);
+            for (int i = 0; i < variantCount; ++i) {
+                auto& var = sp.variants[i];
+                std::string prefix = fmt::format("{}_{}_{}", path, passIdx, i);
+                std::string path = prefix + "_vs.cso";
+                var.vertexShader = CreateShaderFromCompiledFile(path.c_str());
+                path = prefix + "_ps.cso";
+                var.pixelShader = CreateShaderFromCompiledFile(path.c_str());
+                auto& reflect = var.reflect;
+                LoadShaderReflectItemFromFile(prefix + "_vs.reflect.json",
+                                              reflect.vs);
+                LoadShaderReflectItemFromFile(prefix + "_ps.reflect.json",
+                                              reflect.ps);
+            }
 
-    //	const std::string type_str = "float vec3 vec4";
-
-    for (auto& m : reflect.vs.globals.members) {
-        if (m.type == "float") {
-            reflect.properties.emplace_back(m.name, ShaderPropertyTypeFloat);
-        } else if (m.type == "vec4") {
-            reflect.properties.emplace_back(m.name, ShaderPropertyTypeVector);
+            passIdx++;
         }
     }
-    for (auto& m : reflect.ps.globals.members) {
-        if (m.type == "float") {
-            reflect.properties.emplace_back(m.name, ShaderPropertyTypeFloat);
-        } else if (m.type == "vec4") {
-            reflect.properties.emplace_back(m.name, ShaderPropertyTypeVector);
-        }
-    }
-    for (auto& t : reflect.ps.images) {
-        reflect.properties.emplace_back(t.name, ShaderPropertyTypeTexture);
-    }
-
-    s->handle = CreateShader(path, vs_name.c_str(), ps_name.c_str());
 
     return s;
+}
+
+int ShaderUtilGetPropertyCount(Shader* s) {
+    return (int)ShaderGetImpl(s)->properties.size();
+}
+
+const char* ShaderUtilGetPropertyName(Shader* s, int propertyIdx) {
+    assert(propertyIdx >= 0 && propertyIdx < ShaderUtilGetPropertyCount(s));
+    return ShaderGetImpl(s)->properties[propertyIdx].name.c_str();
+}
+
+enum ShaderPropertyType ShaderUtilGetPropertyType(Shader* s, int propertyIdx) {
+    assert(propertyIdx >= 0 && propertyIdx < ShaderUtilGetPropertyCount(s));
+    return ShaderGetImpl(s)->properties[propertyIdx].type;
 }

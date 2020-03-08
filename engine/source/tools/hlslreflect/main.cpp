@@ -30,6 +30,7 @@ struct ShaderReflectType {
     };
 
     std::string name;
+    uint32_t block_size = 0;
     std::vector<Member> members;
 };
 
@@ -91,7 +92,11 @@ static ID3D10Blob *CreateShaderFromCompiledFile(const char* path) {
 }
 
 static ShaderReflectShader ReflectShader(ID3D10Blob* shader, ShaderType shaderType) {
+#ifdef _DEBUG
+    constexpr bool printMsg = true;
+#else
     constexpr bool printMsg = false;
+#endif
     ComPtr<ID3D12ShaderReflection> pReflector;
     HRESULT hr = D3DReflect(shader->GetBufferPointer(), shader->GetBufferSize(),
         IID_PPV_ARGS(&pReflector));
@@ -149,6 +154,7 @@ static ShaderReflectShader ReflectShader(ID3D10Blob* shader, ShaderType shaderTy
 
         ShaderReflectType _type;
         _type.name = bindDesc.Name;
+        _type.block_size = bufferDesc.Size;
 
         for (uint32_t j = 0; j < bufferDesc.Variables; ++j) {
             ID3D12ShaderReflectionVariable* var =
@@ -225,13 +231,24 @@ static ShaderReflectShader ReflectShader(ID3D10Blob* shader, ShaderType shaderTy
             _shader.images.push_back(t);
         }
         else if (D3D_SIT_CBUFFER == bindDesc.Type) {
-            ShaderReflectCBufferBindInfo t;
-            t.name = bindDesc.Name;
-            t.type = bindDesc.Name;
-            t.block_size = 0;
-            t.set = bindDesc.Space;
-            t.binding = bindDesc.BindPoint;
-            _shader.ubos.push_back(t);
+            ShaderReflectCBufferBindInfo ub;
+            ub.name = bindDesc.Name;
+            ub.type = bindDesc.Name;
+            ub.block_size = 0;
+            ub.set = bindDesc.Space;
+            ub.binding = bindDesc.BindPoint;
+            bool found = false;
+            for (auto& type : _shader.types)
+            {
+                if (type.name == ub.name)
+                {
+                    found = true;
+                    ub.block_size = type.block_size;
+                    break;
+                }
+            }
+            assert(found);
+            _shader.ubos.push_back(ub);
         }
     }
 
@@ -245,7 +262,16 @@ void Serialize(Writer& writer, ShaderReflectType::Member& member) {
     writer.Key("name");
     writer.String(member.name.c_str());
     writer.Key("type");
-    writer.String(member.name.c_str());
+    auto type = member.type;
+    if (type == "float2")
+        type = "vec2";
+    else if (type == "float3")
+        type = "vec3";
+    else if (type == "float4")
+        type = "vec4";
+    else if (type == "float4x4")
+        type = "mat4";
+    writer.String(type.c_str());
     writer.Key("offset");
     writer.Uint(member.offset);
     writer.Key("used");

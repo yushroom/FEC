@@ -70,6 +70,14 @@ add_library(mikktspace
 target_include_directories(mikktspace PUBLIC ${MIKKTSPACE_ROOT_DIR})
 set_target_properties(mikktspace PROPERTIES FOLDER "ThirdParty")
 
+set(MICROTAR_ROOT_DIR "microtar/src")
+add_library(microtar
+	${MICROTAR_ROOT_DIR}/microtar.h
+	${MICROTAR_ROOT_DIR}/microtar.c)
+target_include_directories(microtar PUBLIC ${MICROTAR_ROOT_DIR})
+set_target_properties(microtar PROPERTIES FOLDER "ThirdParty")
+target_compile_definitions(microtar PRIVATE _CRT_SECURE_NO_WARNINGS)
+
 set(QUICKJS_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/QuickJS")
 add_library(quickjs
     ${QUICKJS_ROOT_DIR}/cutils.c

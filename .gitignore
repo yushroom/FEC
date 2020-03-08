@@ -8,3 +8,4 @@ engine/source/codegen/parsetab.py
 temp
 engine/source/bin
 engine/source/tools/shaderlab/parsetab.py
+engine/shaders/runtime

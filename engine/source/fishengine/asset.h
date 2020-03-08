@@ -30,6 +30,14 @@ void *AssetGet2(AssetType type, uint32_t idx);
 void AssetDelete(AssetID aid);
 void AssetDeleteAll();
 
+typedef struct {
+    const char name[32];
+    void *impl;
+} AssetBundle;
+
+AssetBundle *AssetBundleNew(const char *path);
+void AssetbundleFree(AssetBundle *ab);
+
 #ifdef __cplusplus
 }
 #endif

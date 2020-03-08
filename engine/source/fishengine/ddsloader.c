@@ -57,6 +57,13 @@ uint8_t *loadDDS(const char *path, TextureDesc *desc, uint32_t *byteLength) {
     size_t file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
+#if WIN32
+    uint8_t *bytes = malloc(file_size);
+    fread(bytes, file_size, 1, f);
+    fclose(f);
+    *byteLength = file_size;
+    return bytes;
+#else
     struct FullHeader header;
     fread(&header, sizeof(header), 1, f);
 
@@ -89,4 +96,5 @@ uint8_t *loadDDS(const char *path, TextureDesc *desc, uint32_t *byteLength) {
 
     *byteLength = size;
     return bytes;
+#endif
 }

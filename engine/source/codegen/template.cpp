@@ -235,6 +235,9 @@ class Material {
     void SetShader(Shader *shader) {{
         MaterialSetShader(self, shader);
     }}
+    void EnableKeyword(string keyword) {{
+        MaterialEnableKeyword(self, keyword);
+    }}
     
     // dtor() {{
     //     if (self) {

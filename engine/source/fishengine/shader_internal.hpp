@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 #include "shader.h"
 
@@ -50,6 +51,7 @@ struct ShaderProperty {
     std::string name;
     ShaderPropertyType type;
 
+    ShaderProperty() = default;
     ShaderProperty(const std::string& name, ShaderPropertyType type)
         : name(name), type(type) {}
 };
@@ -57,11 +59,32 @@ struct ShaderProperty {
 struct ShaderReflect {
     ShaderReflectItem vs;
     ShaderReflectItem ps;
-    std::vector<ShaderProperty> properties;
 };
 
-inline ShaderReflect& ShaderGetReflect(Shader* s) {
-    return *(ShaderReflect*)s->reflect;
+struct ShaderVariant {
+    ShaderHandle vertexShader = 0;
+    ShaderHandle pixelShader = 0;
+    ShaderReflect reflect;
+};
+
+struct ShaderPass {
+    std::vector<std::vector<std::string>> multiCompiles;
+    std::vector<std::string> shaderFeatures;
+    std::vector<ShaderVariant> variants;
+};
+
+struct ShaderImpl {
+    std::vector<ShaderProperty> properties;
+    std::vector<ShaderPass> passes;
+    std::vector<std::string> keywords;
+};
+
+inline ShaderImpl* ShaderGetImpl(Shader* s) {
+    return (ShaderImpl*)s->impl;
+}
+
+inline const std::vector<std::string>& ShaderGetKeywords(Shader *s) {
+    return ShaderGetImpl(s)->keywords;
 }
 
 #endif /* SHADER_REFLECT_HPP */

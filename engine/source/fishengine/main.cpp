@@ -13,9 +13,15 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 #include <stdio.h>
+#include <string>
+#include <filesystem>
 
 #include "app.h"
 #include "render_d3d12.hpp"
+
+extern "C" {
+const char* ApplicationFilePath();
+}
 
 
 static void glfw_error_callback(int error, const char* description) {
@@ -49,7 +55,7 @@ int main(int, char**)
     // Create window with graphics context
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window =
-        glfwCreateWindow(1280, 800, "Dear ImGui GLFW+Metal example", NULL, NULL);
+        glfwCreateWindow(1280, 800, "FishEngine Editor", NULL, NULL);
     if (window == NULL) return 1;
 
     glfwSetKeyCallback(window, glfw_key_callback);
@@ -85,9 +91,12 @@ int main(int, char**)
                         srvHeap->GetCPUDescriptorHandleForHeapStart(),
                         srvHeap->GetGPUDescriptorHandleForHeapStart());
 
-#define font_path "E:\\workspace\\cengine\\engine\\source\\thirdparty\\imgui\\misc\\fonts\\DroidSans.ttf"
-    ImFont* font = io.Fonts->AddFontFromFileTTF(font_path, 16.0f);
-    IM_ASSERT(font != NULL);
+    std::string font_path = ApplicationFilePath();
+    font_path += "/../DroidSans.ttf";
+    if (std::filesystem::exists(font_path)) {
+        ImFont* font = io.Fonts->AddFontFromFileTTF(font_path.c_str(), 16.0f);
+        IM_ASSERT(font != NULL);
+    }
 
     app_init();
 
@@ -120,6 +129,7 @@ int main(int, char**)
         ImGui::Render();
 
         auto cmdList = GetCurrentGraphicsCommandList();
+        cmdList->SetDescriptorHeaps(1, &srvHeap);
         ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList);
         FrameEnd();
     }

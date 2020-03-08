@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "array.h"
 #include "component.h"
@@ -33,11 +34,12 @@ typedef struct {
 
 #define EntityNameLenth 32
 
-typedef struct {
+typedef struct _Entity {
     uint8_t componentCount;
     _Component components[MaxComponentCountPerEntity];
     uint64_t componentBits;
     char name[EntityNameLenth];
+    bool deleted;
 } _Entity;
 
 struct ComponentArray {
@@ -45,11 +47,17 @@ struct ComponentArray {
     ComponentType type;
 };
 
-typedef struct {
+typedef void CTOR(void *);
+typedef void DTOR(void *);
+
+struct ComponentDef {
     ComponentType type;
     const char *name;
-    int size;
-} ComponentDef;
+    uint32_t size;
+    void (*ctor)(void *);
+    void (*dtor)(void *);
+};
+typedef struct ComponentDef ComponentDef;
 
 struct WorldDef {
     ComponentDef *componentDefs;
@@ -83,15 +91,15 @@ static inline void *EntityGetComponent(Entity e, World *w, ComponentType type) {
     if (TransformID == type) {
         return ComponentArrayAt(&w->componentArrays[TransformID], e);
     }
-    _Entity _e = w->entities[e];
+    _Entity *_e = w->entities + e;
     const uint64_t test = (1ull << type);
-    if ((_e.componentBits & test) == 0) return NULL;
-    for (int i = 0; i < _e.componentCount; ++i) {
-        if (_e.components[i].type == type)
+    if ((_e->componentBits & test) == 0) return NULL;
+    for (int i = 0; i < _e->componentCount; ++i) {
+        if (_e->components[i].type == type)
             return ComponentArrayAt(&w->componentArrays[type],
-                                    _e.components[i].index);
+                                    _e->components[i].index);
     }
-    abort();
+    assert(false);
     return NULL;
 }
 
@@ -125,13 +133,13 @@ static inline void *ComponentGetSiblingComponent(World *w, void *comp,
     return EntityGetComponent(e, w, otherType);
 }
 
-typedef void (*System1Func)(void *);
+typedef void *System1Func(void *);
 void SystemWrapper1(World *w, ComponentType T, System1Func f);
 
 #define System1(name, func, T) \
     void name(World *w) { SystemWrapper1(w, T, (System1Func)func); }
 
-typedef void (*System2Func)(void *, void *);
+typedef void *System2Func(void *, void *);
 void SystemWrapper2(World *w, ComponentType T1, ComponentType T2,
                     System2Func f);
 

@@ -15,10 +15,10 @@ add_library(FishEngine
     light.h light.c
     
     asset.h asset.cpp
-    shader.h shader.cpp shader_reflect.hpp shader_util.h shader_util.cpp
+    shader.h shader.cpp shader_internal.hpp shader_util.h
     mesh.h mesh.c vertexdecl.h
     texture.h texture.c
-    material.h material.c material.cpp
+    material.h material.cpp material_internal.hpp
     rhi.h 
     
     animation.h animation.c
@@ -26,7 +26,7 @@ add_library(FishEngine
 )
 target_compile_features(FishEngine PUBLIC cxx_std_17)
 target_compile_features(FishEngine PUBLIC c_std_11)
-target_link_libraries(FishEngine PUBLIC imgui glfw quickjs mikktspace fmt)
+target_link_libraries(FishEngine PUBLIC imgui glfw quickjs mikktspace fmt microtar)
 target_compile_options(FishEngine PUBLIC "-march=native")
 target_include_directories(FishEngine PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../thirdparty/rapidjson/include")
 target_include_directories(FishEngine PUBLIC "${CMAKE_CURRENT_LIST_DIR}")

@@ -66,13 +66,7 @@ struct Animation {
 };
 typedef struct Animation Animation;
 
-static inline void AnimationInit(Animation *a) {
-    a->localTime = 0;
-    a->length = 0;
-    array_init(&a->clips, sizeof(AnimationClip *), 4);
-    a->playing = false;
-}
-
+void AnimationInit(Animation *a);
 void AnimationAddClip(Animation *animation, AnimationClip *clip);
 void AnimationPlay(World *w, Animation *a);
 

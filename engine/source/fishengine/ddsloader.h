@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 typedef struct {
     uint32_t width;
@@ -14,6 +15,7 @@ typedef struct {
 extern "C" {
 #endif
 
+bool ConvertToDDS(const char *path);
 uint8_t *loadDDS(const char *path, TextureDesc *desc, uint32_t *byteLength);
 
 #ifdef __cplusplus

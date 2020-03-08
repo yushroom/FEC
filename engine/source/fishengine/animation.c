@@ -126,6 +126,13 @@ void AnimationClipFree(void *c) {
     free(c);
 }
 
+void AnimationInit(Animation *a) {
+    a->localTime = 0;
+    a->length = 0;
+    array_init(&a->clips, sizeof(AnimationClip *), 4);
+    a->playing = false;
+}
+
 #define _MAX(a, b) (a) > (b) ? (a) : (b)
 
 void AnimationAddClip(Animation *animation, AnimationClip *clip) {

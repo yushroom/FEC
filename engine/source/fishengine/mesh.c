@@ -170,9 +170,9 @@ void MeshUploadMeshData(Mesh *m) {
         if (!(m->attributes & (1 << VertexAttrNormal))) {
             MeshRecalculateNormals(m);
         }
-        //		if (!(m->attributes & (1 << VertexAttrTangent))) {
-        //			MeshRecalculateTangents(m);
-        //		}
+		if (!(m->attributes & (1 << VertexAttrTangent))) {
+			MeshRecalculateTangents(m);
+		}
         Memory memory = {.buffer = m->vertices.ptr,
                          .byteLength = array_get_bytelength(&m->vertices)};
         int flag = GPUResourceUsageVertexBuffer;

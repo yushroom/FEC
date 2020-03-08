@@ -116,27 +116,13 @@ vec4 SRGBtoLINEAR(vec4 srgbIn)
 
 
 #define HAS_NORMALS 1
-#define HAS_TANGENTS 0
+#define HAS_TANGENTS 1
 
 
 // Find the normal for this fragment, pulling either from a predefined normal map
 // or from the interpolated mesh normal and tangent attributes.
 float3 getNormal(VSToPS pin)
 {
-//#if HAS_NORMALMAP
-//    float2 v_UV = pin.TexCoord;
-//    float3 v_Normal = normalize(pin.WorldNormal);
-//    float3 v_Tangent = normalize(pin.WorldTangent.xyz);
-//    float3 v_Bitangent = cross(v_Normal, v_Tangent) * pin.WorldTangent.w;
-//    float3x3 tbn = {v_Tangent, v_Bitangent, v_Normal};
-//
-//    vec3 n = texture2D(normalTexture, v_UV).rgb;
-//    n = normalize(mul((2.0 * n - 1.0) * vec3(normalScale, normalScale, 1.0), tbn));
-//    return n;
-//#else
-//    return normalize(pin.WorldNormal);
-//#endif
-
 	float2 v_UV = pin.TexCoord;
 	float3 v_Normal = normalize(pin.WorldNormal);
 	float3 v_Position = pin.WorldPosition;
@@ -160,7 +146,9 @@ float3 getNormal(VSToPS pin)
     vec3 b = normalize(cross(ng, t));
     mat3 tbn = mat3(t, b, ng);
 #else // HAS_TANGENTS
-    mat3 tbn = v_TBN;
+    float3 v_Tangent = normalize(pin.WorldTangent.xyz);
+    float3 v_Bitangent = cross(v_Normal, v_Tangent) * pin.WorldTangent.w;
+    mat3 tbn = mat3(v_Tangent, v_Bitangent, v_Normal);
 #endif
 
 #if HAS_NORMALMAP

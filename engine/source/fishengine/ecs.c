@@ -1,7 +1,6 @@
 #include "ecs.h"
 
 #include "statistics.h"
-#include "transform.h"
 
 static void ComponentArrayInit(ComponentArray *array, ComponentType type,
                                int classSize, int capacity) {
@@ -18,8 +17,9 @@ Entity WorldCreateEntity(World *w) {
     _Entity *_e = w->entities + e;
     _e->componentBits = 0;
     _e->componentCount = 0;
-    Transform *t = EntityAddComponent(e, w, TransformID);
-    TransformInit(t);
+    //Transform *t = EntityAddComponent(e, w, TransformID);
+    //TransformInit(t);
+    EntityAddComponent(e, w, TransformID);
     return e;
 }
 
@@ -38,7 +38,11 @@ void *EntityAddComponent(Entity e, World *w, ComponentType type) {
     _c->index = w->componentArrays[type].m.size++;
     assert(_c->index < MaxComponent);
     w->componentEntityMap[type][_c->index] = e;
-    return ComponentArrayAt(&w->componentArrays[type], _c->index);
+    void *comp = ComponentArrayAt(&w->componentArrays[type], _c->index);
+    if (w->def.componentDefs[type].ctor) {
+        w->def.componentDefs[type].ctor(comp);
+    }
+    return comp;
 }
 
 static void WorldInit(World *w) {

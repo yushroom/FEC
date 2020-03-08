@@ -17,8 +17,6 @@ struct Material {
     Shader *shader;
     Texture *mainTexture;
     float4 color;
-    //    float metallic;
-    //    float roughness;
     void *impl;
 };
 typedef struct Material Material;
@@ -33,7 +31,10 @@ float4 MaterialGetVector(Material *mat, int nameID);
 void MaterialSetTexture(Material *mat, int nameID, Texture *texture);
 Texture *MaterialGetTexture(Material *mat, int nameID);
 
-Memory MaterialBuildGloblsCB(Material *mat);
+bool MaterialIsKeywordEnabled(Material *mat, const char *keyword);
+void MaterialSetKeyword(Material *mat, const char *keyword, bool enabled);
+void MaterialEnableKeyword(Material *mat, const char *keyword);
+void MaterialDisableKeyword(Material *mat, const char *keyword);
 
 #ifdef __cplusplus
 }

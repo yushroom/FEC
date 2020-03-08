@@ -4,10 +4,12 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <set>
 
 #include "asset.h"
+#include "material_internal.hpp"
 #include "shader.h"
-#include "shader_reflect.hpp"
+#include "shader_internal.hpp"
 
 struct MaterialPropertyBlock {
     bool IsEmpty() const { return m_FloatPos.empty() && m_Textures.empty(); }
@@ -133,56 +135,60 @@ bool MaterialPropertyBlock::GetFloats(int nameID, float *values, int count) {
 }
 
 struct ShaderKeywordCombination {
-    // int count;
     uint32_t hash = 0;
-    std::vector<std::pair<std::string, int>> bit;
+    // std::vector<std::pair<std::string, int>> bit;
+    std::vector<std::vector<std::string>> multiCompiles;
+    std::vector<std::string> keywords;
+    //std::vector<std::string> enabledKeywords;
+    std::vector<uint32_t> indices;
 
     ShaderKeywordCombination() = default;
 
-    ShaderKeywordCombination(const ShaderKeywordCombination &b) {
-        hash = b.hash;
-        bit = b.bit;
-    }
-
-    ShaderKeywordCombination &operator=(const ShaderKeywordCombination &b) {
-        hash = b.hash;
-        bit = b.bit;
-        return *this;
-    }
-
     void SetKeyword(const std::string &keyword, bool enabled) {
-        for (auto &[k, v] : bit) {
-            if (keyword == k) {
-                v = enabled ? 1 : 0;
-                return;
+        //{
+        //    auto it = std::find(enabledKeywords.begin(), enabledKeywords.end(),
+        //                        keyword);
+        //    if (it != enabledKeywords.end()) return;
+        //}
+        //enabledKeywords.push_back(keyword);
+        {
+            int mcIdx = 0;
+            for (auto &mcs : multiCompiles) {
+                auto it = std::find(mcs.begin(), mcs.end(), keyword);
+                if (it != mcs.end()) {
+                    if (enabled)
+                        indices[mcIdx] = std::distance(mcs.begin(), it);
+                    else
+                        indices[mcIdx] = 0;
+                    break;
+                }
+                mcIdx++;
             }
         }
-        assert(false && "keyword not found");
-    }
 
-    void Create(const std::vector<std::string> &keywords) {
-        assert(keywords.size() < 32);
-        bit.clear();
-        for (size_t count = 0; count < keywords.size(); ++count) {
-            bit.emplace_back(keywords[count], 0);
+        hash = 0;
+        uint32_t mcCount = multiCompiles.size();
+        for (int mcIdx = mcCount - 1; mcIdx >= 0; --mcIdx) {
+            int val = indices[mcIdx];
+            hash = hash * multiCompiles[mcIdx].size() + val;
         }
     }
 
-    uint32_t GetHashKey() const {
-        uint32_t key = 0;
-        for (auto [k, v] : bit) {
-            key <<= 1;
-            key |= (v & 1);
-        }
-        return key;
+    void Create(const std::vector<std::vector<std::string>> &multiCompiles,
+                const std::vector<std::string> &keywords) {
+        this->multiCompiles = multiCompiles;
+        this->keywords = keywords;
+        this->indices.resize(multiCompiles.size(), 0);
     }
+
+    uint32_t GetHashKey() const { return hash; }
 };
 
 struct MaterialImpl {
-    ShaderKeywordCombination m_Keywords;
     MaterialPropertyBlock m_PropertyBlock;
-    std::vector<uint8_t> m_VSGlobals;
-    std::vector<uint8_t> m_PSGlobals;
+    std::vector<uint32_t> shaderPassCache;
+    std::vector<ShaderKeywordCombination> keywordForPass;
+    std::map<std::string, bool> keywords;
 };
 
 void *MaterialNew() {
@@ -199,10 +205,6 @@ void MaterialFree(void *m) {
     MaterialImpl *impl = (MaterialImpl *)material->impl;
     delete impl;
     free(material);
-}
-
-static MaterialImpl *MaterialGetImpl(Material *mat) {
-    return (MaterialImpl *)mat->impl;
 }
 
 void MaterialSetFloat(Material *mat, int nameID, float value) {
@@ -229,50 +231,95 @@ Texture *MaterialGetTexture(Material *mat, int nameID) {
 inline int NextMultipleOf8(int x) { return (x + 7) & (-8); }
 
 void MaterialSetShader(Material *mat, Shader *shader) {
+    if (shader == NULL) return;
     mat->shader = shader;
-    ShaderReflect &reflect = ShaderGetReflect(shader);
+    // ShaderReflect &reflect = ShaderGetReflect(shader);
+    ShaderImpl *shaderImpl = ShaderGetImpl(shader);
     MaterialImpl *impl = MaterialGetImpl(mat);
-    impl->m_VSGlobals.resize(NextMultipleOf8(reflect.vs.globals.block_size));
-    impl->m_PSGlobals.resize(NextMultipleOf8(reflect.ps.globals.block_size));
     impl->m_PropertyBlock.Clear();
 
-    for (auto &m : reflect.vs.globals.members) {
-        int nameID = ShaderPropertyToID(m.name.c_str());
-        if (m.type == "float") {
-            impl->m_PropertyBlock.SetFloat(nameID, 0);
-        } else if (m.type == "vec3" || m.type == "vec4") {
-            impl->m_PropertyBlock.SetVector(nameID, float4_zero);
-        }
+    for (auto &kw : shaderImpl->keywords) {
+        impl->keywords[kw] = false;
     }
 
-    for (auto &m : reflect.ps.globals.members) {
-        int nameID = ShaderPropertyToID(m.name.c_str());
-        if (m.type == "float") {
-            impl->m_PropertyBlock.SetFloat(nameID, 0);
-        } else if (m.type == "vec3" || m.type == "vec4") {
-            impl->m_PropertyBlock.SetVector(nameID, float4_zero);
+    impl->keywordForPass.resize(shaderImpl->passes.size());
+    for (int i = 0; i < shader->passCount; ++i) {
+        impl->keywordForPass[i].Create(shaderImpl->passes[i].multiCompiles,
+                                       shaderImpl->keywords);
+    }
+
+    impl->shaderPassCache.resize(shader->passCount);
+    for (int i = 0; i < shader->passCount; ++i) {
+        impl->shaderPassCache[i] = 0;
+    }
+
+    for (auto &pass : shaderImpl->passes) {
+        for (auto &m : pass.variants[0].reflect.vs.globals.members) {
+            int nameID = ShaderPropertyToID(m.name.c_str());
+            if (m.type == "float") {
+                impl->m_PropertyBlock.SetFloat(nameID, 0);
+            } else if (m.type == "vec3" || m.type == "vec4") {
+                impl->m_PropertyBlock.SetVector(nameID, float4_zero);
+            }
+        }
+
+        for (auto &m : pass.variants[0].reflect.ps.globals.members) {
+            int nameID = ShaderPropertyToID(m.name.c_str());
+            if (m.type == "float") {
+                impl->m_PropertyBlock.SetFloat(nameID, 0);
+            } else if (m.type == "vec3" || m.type == "vec4") {
+                impl->m_PropertyBlock.SetVector(nameID, float4_zero);
+            }
         }
     }
 }
 
-Memory MaterialBuildGloblsCB(Material *mat) {
-    ShaderReflect &reflect = ShaderGetReflect(mat->shader);
+bool MaterialIsKeywordEnabled(Material *mat, const char *keyword) {
+    if (!mat || !mat->shader) return false;
     MaterialImpl *impl = MaterialGetImpl(mat);
-    Memory mem;
-    mem.buffer = impl->m_PSGlobals.data();
-    mem.byteLength = impl->m_PSGlobals.size();
+    Shader *shader = mat->shader;
+    ShaderImpl *shaderImpl = ShaderGetImpl(shader);
 
-    for (auto &m : reflect.ps.globals.members) {
-        if (!m.used) continue;
-        if (m.type == "float") {
-            float v = MaterialGetFloat(mat, m.nameID);
-            float *ptr = (float *)((uint8_t *)mem.buffer + m.offset);
-            *ptr = v;
-        } else if (m.type == "vec2" || m.type == "vec3" || m.type == "vec4") {
-            float4 v = MaterialGetVector(mat, m.nameID);
-            memcpy((uint8_t *)mem.buffer + m.offset, &v, m.bytes);
-        }
+    auto &kws = shaderImpl->keywords;
+    bool found = kws.end() != std::find(shaderImpl->keywords.begin(),
+                                        shaderImpl->keywords.end(), keyword);
+    if (!found) return false;
+
+    return impl->keywords[keyword];
+}
+
+void MaterialSetKeyword(Material* mat, const char* keyword, bool enabled) {
+    if (!mat || !mat->shader) return;
+    MaterialImpl *impl = MaterialGetImpl(mat);
+    Shader *shader = mat->shader;
+    ShaderImpl *shaderImpl = ShaderGetImpl(shader);
+
+    auto &kws = shaderImpl->keywords;
+    bool found = kws.end() != std::find(shaderImpl->keywords.begin(),
+                                        shaderImpl->keywords.end(), keyword);
+    if (!found) return;
+
+    if (impl->keywords[keyword] == enabled) return;
+    impl->keywords[keyword] = enabled;
+
+    for (auto &p : impl->keywordForPass) {
+        p.SetKeyword(keyword, enabled);
     }
 
-    return mem;
+    for (int passIdx = 0; passIdx < shader->passCount; ++passIdx) {
+        impl->shaderPassCache[passIdx] =
+            impl->keywordForPass[passIdx].GetHashKey();
+    }
+}
+
+void MaterialEnableKeyword(Material *mat, const char *keyword) {
+    MaterialSetKeyword(mat, keyword, true);
+}
+void MaterialDisableKeyword(Material *mat, const char *keyword) {
+    MaterialSetKeyword(mat, keyword, false);
+}
+
+uint32_t MaterialGetVariantIndex(Material *material, uint32_t passIdx) {
+    MaterialImpl *impl = MaterialGetImpl(material);
+    return impl->shaderPassCache[passIdx];
 }

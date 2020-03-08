@@ -1059,6 +1059,25 @@ static JSValue js_fe_Material_SetShader(JSContext *ctx, JSValueConst this_value,
 
     return JS_UNDEFINED;
 }
+static JSValue js_fe_Material_EnableKeyword(JSContext *ctx,
+                                            JSValueConst this_value, int argc,
+                                            JSValueConst *argv) {
+    Material *self =
+        (Material *)JS_GetOpaque2(ctx, this_value, js_fe_Material_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 1) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    string keyword;
+    if (JSValueTo<string>(ctx, &keyword, argv[0])) return JS_EXCEPTION;
+
+    MaterialEnableKeyword(self, keyword);
+
+    JSValueFree<string>(ctx, keyword);
+
+    return JS_UNDEFINED;
+}
 
 static const JSCFunctionListEntry js_fe_Material_proto_funcs[] = {
     JS_CGETSET_DEF("mainTexture", js_fe_Material_mainTexture_getter,
@@ -1069,6 +1088,7 @@ static const JSCFunctionListEntry js_fe_Material_proto_funcs[] = {
     JS_CFUNC_DEF("SetVector", 2, js_fe_Material_SetVector),
     JS_CFUNC_DEF("SetTexture", 2, js_fe_Material_SetTexture),
     JS_CFUNC_DEF("SetShader", 1, js_fe_Material_SetShader),
+    JS_CFUNC_DEF("EnableKeyword", 1, js_fe_Material_EnableKeyword),
 };
 
 extern "C" {

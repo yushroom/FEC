@@ -1,5 +1,4 @@
 // adapted from https://github.com/KhronosGroup/glTF-WebGL-PBR/blob/master/shaders/pbr-frag.glsl
-//keyword HAS_OCCLUSIONMAP 0
 #include <AppData.hlsl>
 #include <ShaderVariables.hlsl>
 #include <Common.hlsl>
@@ -29,10 +28,11 @@ struct VSToPS
 VSToPS VS(AppData vin)
 {
 	VSToPS vout;
-	vout.Position = mul(MATRIX_MVP, float4(vin.Position, 1.0));
-	vout.WorldPosition = mul(MATRIX_M, float4(vin.Position, 1.0)).xyz;
+    float4 posH = float4(vin.Position.xyz, 1.0);
+	vout.Position = mul(MATRIX_MVP, posH);
+	vout.WorldPosition = mul(MATRIX_M, posH).xyz;
 	vout.TexCoord = vin.TexCoord;
-	vout.WorldNormal = normalize(mul(MATRIX_IT_M, float4(vin.Normal, 0.0)).xyz);
+	vout.WorldNormal = normalize(mul(MATRIX_IT_M, float4(vin.Normal.xyz, 0.0)).xyz);
     vout.WorldTangent.xyz = normalize(mul(MATRIX_M, float4(vin.Tangent.xyz, 0.0)).xyz);
     vout.WorldTangent.w = vin.Tangent.w;
 	return vout;
@@ -73,7 +73,7 @@ float3 emissiveFactor;
 #endif
 
 #if ALPHA_TEST
-float alphaCutoff;
+    float alphaCutoff;
 #endif
 
 

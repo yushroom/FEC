@@ -63,10 +63,22 @@ void RenderSystem(World *w) {
 }
 
 #define COMP(T) \
-    { .type = T##ID, .name = #T, .size = sizeof(T) }
+    { .type = T##ID, .name = #T, .size = sizeof(T), .ctor=NULL, .dtor=NULL, }
+
 static ComponentDef g_componentDef[] = {
-    COMP(Transform), COMP(Renderable), COMP(Camera),
-    COMP(Light),     COMP(Animation),
+    {.type = TransformID,
+     .name = "Transform",
+     .size = sizeof(Transform),
+     .ctor = TransformInit,
+     .dtor = NULL},
+    COMP(Renderable),
+    COMP(Camera),
+    COMP(Light),
+    {.type = AnimationID,
+     .name = "Animation",
+     .size = sizeof(Animation),
+     .ctor = AnimationInit,
+     .dtor = NULL},
 };
 
 static ComponentDef g_singleComponentDef[] = {
@@ -331,6 +343,8 @@ static char *js_module_normalize_name(JSContext *ctx, const char *base_name,
 }
 #endif
 
+const char *ApplicationFilePath();
+
 int app_init() {
     debug_init();
 
@@ -396,7 +410,7 @@ int app_init() {
 int app_reload() {
     //	debug_clear_all();
     WorldClear(w);
-    AssetDeleteAll();
+    //AssetDeleteAll();
 
     WorldAddSystem(w, AnimationSystem);
     WorldAddSystem(w, TransformSystem);
@@ -419,6 +433,25 @@ int app_reload() {
 int app_reload2() {
     debug_clear_all();
     js_fishengine_free_handlers(rt);
+    js_std_free_handlers(rt);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+
+    rt = JS_NewRuntime();
+    ctx = JS_NewContext(rt);
+    js_std_add_helpers(ctx, 0, NULL);
+    js_init_module_os(ctx, "os");
+    js_init_module_std(ctx, "std");
+
+    JSModuleNormalizeFunc *module_normalize = NULL;
+#if WIN32
+    module_normalize = js_module_normalize_name;
+#endif
+    JS_SetModuleLoaderFunc(rt, module_normalize, js_module_loader, NULL);
+
+    js_init_module_fishengine(ctx, "FishEngine");
+    js_init_module_imgui(ctx, "imgui");
+
     int flags = JS_EVAL_TYPE_MODULE;
     eval_file(ctx, path, flags);
     app_reload();
@@ -500,7 +533,9 @@ void open_file_by_callstack(const uint8_t *callstack) {
         char command[1024] = {0};
 #if WIN32
         // https://stackoverflow.com/questions/2642551/windows-c-system-call-with-spaces-in-command
-        strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
+        //strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
+        strcat(command, "\"\"C:\\Users\\yushroom\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" -g \"");
+        
 #else
         strcat(command,
                "\"/Applications/Sublime "

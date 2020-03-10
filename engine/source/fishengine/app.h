@@ -11,6 +11,7 @@ int app_init();
 int app_reload();
 int app_reload2();
 int app_update();
+int app_frame_end();
 int app_render_ui();
 
 void app_play();

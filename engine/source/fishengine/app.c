@@ -21,6 +21,8 @@
 #include "rhi.h"
 #include "statistics.h"
 #include "transform.h"
+#include "singleton_time.h"
+#include "input.h"
 
 #ifndef countof
 #define countof(x) (sizeof(x) / sizeof((x)[0]))
@@ -62,8 +64,11 @@ void RenderSystem(World *w) {
     }
 }
 
-#define COMP(T) \
-    { .type = T##ID, .name = #T, .size = sizeof(T), .ctor=NULL, .dtor=NULL, }
+#define COMP(T)                                                     \
+    {                                                               \
+        .type = T##ID, .name = #T, .size = sizeof(T), .ctor = NULL, \
+        .dtor = NULL,                                               \
+    }
 
 static ComponentDef g_componentDef[] = {
     {.type = TransformID,
@@ -83,6 +88,8 @@ static ComponentDef g_componentDef[] = {
 
 static ComponentDef g_singleComponentDef[] = {
     COMP(SingletonTransformManager),
+    COMP(SingletonInput),
+    COMP(SingletonTime),
 };
 
 #if 0
@@ -285,6 +292,7 @@ static void OnFileChanged(void *context, size_t numevents,
 struct Application {
     bool is_playing;
     bool is_paused;
+    char current_project_dir[512];
 };
 
 struct Application g_app = {.is_playing = false};
@@ -381,6 +389,13 @@ int app_init() {
         tm = malloc(sizeof(SingletonTransformManager));
         TransformManagerInit(tm);
         WorldAddSingletonComponent(w, tm, SingletonTransformManagerID);
+
+        SingletonInput *si = malloc(sizeof(SingletonInput));
+        SingletonInputInit(si);
+        WorldAddSingletonComponent(w, si, SingletonInputID);
+
+        SingletonTime *st = malloc(sizeof(SingletonTime));
+        WorldAddSingletonComponent(w, st, SingletonTimeID);
     }
 
     SetDefaultWorld(w);
@@ -410,7 +425,7 @@ int app_init() {
 int app_reload() {
     //	debug_clear_all();
     WorldClear(w);
-    //AssetDeleteAll();
+    // AssetDeleteAll();
 
     WorldAddSystem(w, AnimationSystem);
     WorldAddSystem(w, TransformSystem);
@@ -421,6 +436,13 @@ int app_reload() {
         if (!tm) tm = aligned_alloc(16, sizeof(SingletonTransformManager));
         TransformManagerInit(tm);
         WorldAddSingletonComponent(w, tm, SingletonTransformManagerID);
+
+        SingletonInput *si = malloc(sizeof(SingletonInput));
+        SingletonInputInit(si);
+        WorldAddSingletonComponent(w, si, SingletonInputID);
+
+        SingletonTime *st = malloc(sizeof(SingletonTime));
+        WorldAddSingletonComponent(w, st, SingletonTimeID);
     }
     SetDefaultWorld(w);
 
@@ -469,6 +491,11 @@ int app_update() {
     }
     WorldTick(w);
     return 0;
+}
+
+int app_frame_end() {
+    //SingletonInput *si = WorldGetSingletonComponent(w, SingletonInputID);
+    InputSystemPostUpdate(w);
 }
 
 void HierarchyWindow(World *w);
@@ -533,9 +560,11 @@ void open_file_by_callstack(const uint8_t *callstack) {
         char command[1024] = {0};
 #if WIN32
         // https://stackoverflow.com/questions/2642551/windows-c-system-call-with-spaces-in-command
-        //strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
-        strcat(command, "\"\"C:\\Users\\yushroom\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" -g \"");
-        
+        strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
+        // strcat(command,
+        // "\"\"C:\\Users\\yushroom\\AppData\\Local\\Programs\\Microsoft VS
+        // Code\\Code.exe\" -g \"");
+
 #else
         strcat(command,
                "\"/Applications/Sublime "

@@ -16,11 +16,14 @@
 #include <string>
 #include <filesystem>
 
+#include "ecs.h"
 #include "app.h"
 #include "render_d3d12.hpp"
+#include "input.h"
 
 extern "C" {
 const char* ApplicationFilePath();
+extern World* defaultWorld;
 }
 
 
@@ -33,6 +36,12 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode,
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, 1);
     if (key == GLFW_KEY_R && action == GLFW_PRESS) app_reload2();
+
+    SingletonInput *si = (SingletonInput *)WorldGetSingletonComponent(defaultWorld, SingletonInputID);
+    KeyEvent e;
+    e.action = action == GLFW_PRESS ? KeyActionPressed : KeyActionReleased;
+    e.key = KeyCodeFromGLFWKey(key);
+    SingletonInputPostKeyEvent(si, e);
 }
 
 static void glfw_resize_callback(GLFWwindow* window, int width, int height) {
@@ -41,7 +50,7 @@ static void glfw_resize_callback(GLFWwindow* window, int width, int height) {
     CleanupRenderTarget();
     HWND hWnd = glfwGetWin32Window(window);
     ResizeSwapChain(hWnd, width, height);
-    CreateRenderTarget();
+    //CreateRenderTarget();
     ImGui_ImplDX12_CreateDeviceObjects();
 }
 
@@ -99,6 +108,8 @@ int main(int, char**)
     }
 
     app_init();
+    SingletonInput* si = (SingletonInput*)WorldGetSingletonComponent(
+        defaultWorld, SingletonInputID);
 
     // Our state
     bool show_demo_window = true;
@@ -109,6 +120,16 @@ int main(int, char**)
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
+
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        si->mousePositionRawX = xpos;
+        si->mousePositionRawY = ypos;
+        si->mousePositionX = xpos / width;
+        si->mousePositionY = ypos / height;
 
         FrameBegin();
 
@@ -128,10 +149,14 @@ int main(int, char**)
         // Rendering
         ImGui::Render();
 
+        BeginRenderEvent("ImGui");
         auto cmdList = GetCurrentGraphicsCommandList();
         cmdList->SetDescriptorHeaps(1, &srvHeap);
         ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmdList);
+        EndRenderEvent();
+
         FrameEnd();
+        app_frame_end();
     }
 
     WaitForLastSubmittedFrame();

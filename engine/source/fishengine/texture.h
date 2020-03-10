@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef uint32_t TextureID;
 
 typedef enum {
@@ -107,10 +111,6 @@ struct Texture {
     uint32_t anisoLevel;
 };
 typedef struct Texture Texture;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 void *TextureNew();
 void TextureFree(void *);

@@ -89,9 +89,11 @@ DirectX::DescriptorPile* g_StaticSrvDescriptorHeap;
 DirectX::DescriptorPile* g_StaticUavDescriptorHeap;
 DirectX::DescriptorPile* g_DynamicSrvUavDescriptorHeaps[NUM_FRAMES_IN_FLIGHT];
 DirectX::DescriptorPile* g_DynamicSamplerDescriptorHeaps[NUM_FRAMES_IN_FLIGHT];
-TextureHandle g_MainDepthRT = 0;
+TextureHandle g_MainDepthRTs[3] = {0, 0, 0};
 D3D12_CPU_DESCRIPTOR_HANDLE emptySRV2D;
 D3D12_CPU_DESCRIPTOR_HANDLE emptySRV3D;
+
+std::vector<DirectX::GraphicsResource> g_CBVInFlight[NUM_FRAMES_IN_FLIGHT];
 
 inline DirectX::DescriptorPile* GetCurrentSrvDescriptorHeap() {
     return g_DynamicSrvUavDescriptorHeaps[g_CurrentBackBufferIndex];
@@ -272,9 +274,6 @@ uint32_t CreateTexture(uint32_t width, uint32_t height, uint32_t mipmaps,
                        Memory memory) {
     ID3D12Resource* texture = nullptr;
     std::vector<D3D12_SUBRESOURCE_DATA> subresources;
-    // HRESULT hr = DirectX::LoadDDSTextureFromMemory(
-    //    g_Device, (uint8_t*)memory.buffer, memory.byteLength, &texture,
-    //    subresources);
     HRESULT hr = DirectX::CreateDDSTextureFromMemoryEx(
         g_Device, *g_GPUResourceUploader, (uint8_t*)memory.buffer,
         memory.byteLength, 0, D3D12_RESOURCE_FLAG_NONE,
@@ -286,10 +285,11 @@ uint32_t CreateTexture(uint32_t width, uint32_t height, uint32_t mipmaps,
         g_Device, texture, g_StaticSrvDescriptorHeap->GetCpuHandle(idx));
     uint32_t handle = g_Textures.size();
     auto& t = g_Textures.emplace_back();
+    auto size = DirectX::GetTextureSize(texture);
     t.srvIndex = idx;
     t.resource = texture;
-    t.width = width; 
-    t.height = height;
+    t.width = size.x;
+    t.height = size.y;
     t.state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     return handle;
 }
@@ -926,6 +926,7 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
             mem.byteLength, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
         memcpy(_cb0.Memory(), mem.buffer, mem.byteLength);
         g_pCommandList->SetGraphicsRootConstantBufferView(1, _cb0.GpuAddress());
+        g_CBVInFlight[g_CurrentBackBufferIndex].emplace_back(std::move(_cb0));
 
         if (r->mesh->ib != 0) {
             D3D12_INDEX_BUFFER_VIEW ibv = {};
@@ -943,6 +944,10 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
             g_pCommandList->DrawInstanced(MeshGetVertexCount(r->mesh), 1, 0, 0);
         }
     }
+
+    g_CBVInFlight[g_CurrentBackBufferIndex].emplace_back(std::move(cb1));
+    g_CBVInFlight[g_CurrentBackBufferIndex].emplace_back(std::move(cb2));
+    g_CBVInFlight[g_CurrentBackBufferIndex].emplace_back(std::move(cb3));
 
     EndRenderEvent();
     return 0;
@@ -968,15 +973,17 @@ ID3D12DescriptorHeap* GetSRVDescriptorHeap() { return g_pSrvDescHeap->Heap(); }
 void FrameBegin() {
     const float clear_color[4] = {0.45f, 0.55f, 0.60f, 1.00f};
 
-    FrameContext* frameCtxt = WaitForNextFrameResources();
+    UINT backBufferIdx = g_pSwapChain->GetCurrentBackBufferIndex();
+    g_CurrentBackBufferIndex = backBufferIdx;
     for (ID3D12Resource* res : g_PendingResources[g_CurrentBackBufferIndex]) {
         if (res) {
             res->Release();
         }
     }
     g_PendingResources[g_CurrentBackBufferIndex].clear();
+    g_CBVInFlight[g_CurrentBackBufferIndex].clear();
 
-    UINT backBufferIdx = g_pSwapChain->GetCurrentBackBufferIndex();
+    FrameContext* frameCtxt = WaitForNextFrameResources();
     frameCtxt->CommandAllocator->Reset();
 
     auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(
@@ -989,16 +996,17 @@ void FrameBegin() {
         g_mainRenderTargetDescriptor[backBufferIdx], (float*)&clear_color, 0,
         NULL);
 
-    auto& depth = g_Textures[g_MainDepthRT];
+    auto& depth = g_Textures[g_MainDepthRTs[g_CurrentBackBufferIndex]];
     if (depth.width != g_SwapChainWidth || depth.height != g_SwapChainHeight) {
         RenderTextureDescriptor depthRTDesc(g_SwapChainWidth, g_SwapChainHeight,
                                             RenderTextureFormatDepth);
-        g_MainDepthRT = InternalCreateRenderTexture(depthRTDesc);
+        g_MainDepthRTs[g_CurrentBackBufferIndex] =
+            InternalCreateRenderTexture(depthRTDesc);
     }
-    auto depthHandle =
-        g_DSVDescriptorHeap->GetCpuHandle(g_Textures[g_MainDepthRT].dsvIndex);
-    g_Textures[g_MainDepthRT].Transition(g_pCommandList,
-                                         D3D12_RESOURCE_STATE_DEPTH_WRITE);
+    auto depthHandle = g_DSVDescriptorHeap->GetCpuHandle(
+        g_Textures[g_MainDepthRTs[g_CurrentBackBufferIndex]].dsvIndex);
+    g_Textures[g_MainDepthRTs[g_CurrentBackBufferIndex]].Transition(
+        g_pCommandList, D3D12_RESOURCE_STATE_DEPTH_WRITE);
     g_pCommandList->ClearDepthStencilView(depthHandle, D3D12_CLEAR_FLAG_DEPTH,
                                           1, 0, 0, NULL);
     g_pCommandList->OMSetRenderTargets(
@@ -1036,8 +1044,8 @@ void FrameEnd() {
     g_pCommandQueue->ExecuteCommandLists(
         1, (ID3D12CommandList* const*)&g_pCommandList);
 
-    // g_pSwapChain->Present(1, 0);  // Present with vsync
-    g_pSwapChain->Present(0, 0);  // Present without vsync
+    g_pSwapChain->Present(1, 0);  // Present with vsync
+    // g_pSwapChain->Present(0, 0);  // Present without vsync
 
     g_CurrentBackBufferIndex = g_pSwapChain->GetCurrentBackBufferIndex();
 
@@ -1250,8 +1258,8 @@ bool CreateDeviceD3D(HWND hWnd) {
         desc.NumDescriptors = COUNT;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;  // GPU visible
         for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
-            g_DynamicSrvUavDescriptorHeaps[i] = new DirectX::DescriptorPile(
-                g_Device, &desc);
+            g_DynamicSrvUavDescriptorHeaps[i] =
+                new DirectX::DescriptorPile(g_Device, &desc);
         }
         desc.NumDescriptors = FE_MAX_TEXTURE_COUNT;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;  // CPU only
@@ -1347,7 +1355,9 @@ bool CreateDeviceD3D(HWND hWnd) {
     g_Textures.resize(3);
 
     RenderTextureDescriptor depthRTDesc(1280, 800, RenderTextureFormatDepth);
-    g_MainDepthRT = InternalCreateRenderTexture(depthRTDesc);
+    for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
+        g_MainDepthRTs[i] = InternalCreateRenderTexture(depthRTDesc);
+    }
     {
         CD3DX12_ROOT_PARAMETER1 rootParameters[6];
         D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE;
@@ -1358,12 +1368,10 @@ bool CreateDeviceD3D(HWND hWnd) {
         rootParameters[2].InitAsConstantBufferView(2, 0, flags, v);
         rootParameters[3].InitAsConstantBufferView(3, 0, flags, v);
         CD3DX12_DESCRIPTOR_RANGE1 range(D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-                                        srvRootRange, 0,
-                                        0);
+                                        srvRootRange, 0, 0);
         rootParameters[4].InitAsDescriptorTable(1, &range, v);
         CD3DX12_DESCRIPTOR_RANGE1 range2(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
-                                         srvRootRange,
-                                         0, 0);
+                                         srvRootRange, 0, 0);
         rootParameters[5].InitAsDescriptorTable(1, &range2, v);
         g_TestRootSignature =
             CreateRootSignatureFromRootParameters(rootParameters, 6);
@@ -1401,7 +1409,6 @@ bool CreateDeviceD3D(HWND hWnd) {
         }
     }
 
-
     return true;
 }
 
@@ -1431,7 +1438,7 @@ ID3D12PipelineState* GetPipelineState(ShaderHandle vs, ShaderHandle ps) {
     CD3DX12_DEPTH_STENCIL_DESC depthStencil(D3D12_DEFAULT);
     CD3DX12_RASTERIZER_DESC rasterizer(D3D12_DEFAULT);
     rasterizer.CullMode = D3D12_CULL_MODE_FRONT;
-    auto& depth = g_Textures[g_MainDepthRT];
+    auto& depth = g_Textures[g_MainDepthRTs[g_CurrentBackBufferIndex]];
     DirectX::RenderTargetState renderTarget(DXGI_FORMAT_R8G8B8A8_UNORM,
                                             depth.format);
     DirectX::EffectPipelineStateDescription desc(
@@ -1456,6 +1463,8 @@ void CreateRenderTarget() {
         g_pSwapChain->GetBuffer(i, IID_PPV_ARGS(&pBackBuffer));
         g_Device->CreateRenderTargetView(pBackBuffer, NULL,
                                          g_mainRenderTargetDescriptor[i]);
+        auto name = fmt::format(L"SwapChainBackBuffer{}", i);
+        SetDebugObjectName(pBackBuffer, name.c_str());
         g_mainRenderTargetResource[i] = pBackBuffer;
     }
 }
@@ -1508,28 +1517,40 @@ FrameContext* WaitForNextFrameResources() {
 void ResizeSwapChain(HWND hWnd, int width, int height) {
     DXGI_SWAP_CHAIN_DESC1 sd;
     g_pSwapChain->GetDesc1(&sd);
+    if (width <= 0) width = 1;
+    if (height <= 0) height = 1;
     sd.Width = width;
     sd.Height = height;
     g_SwapChainWidth = width;
     g_SwapChainHeight = height;
 
-    IDXGIFactory4* dxgiFactory = NULL;
-    g_pSwapChain->GetParent(IID_PPV_ARGS(&dxgiFactory));
+    // IDXGIFactory4* dxgiFactory = NULL;
+    // g_pSwapChain->GetParent(IID_PPV_ARGS(&dxgiFactory));
 
-    g_pSwapChain->Release();
-    CloseHandle(g_hSwapChainWaitableObject);
+    // g_pSwapChain->Release();
+    // CloseHandle(g_hSwapChainWaitableObject);
 
-    IDXGISwapChain1* swapChain1 = NULL;
-    dxgiFactory->CreateSwapChainForHwnd(g_pCommandQueue, hWnd, &sd, NULL, NULL,
-                                        &swapChain1);
-    swapChain1->QueryInterface(IID_PPV_ARGS(&g_pSwapChain));
-    swapChain1->Release();
-    dxgiFactory->Release();
+    // IDXGISwapChain1* swapChain1 = NULL;
+    // dxgiFactory->CreateSwapChainForHwnd(g_pCommandQueue, hWnd, &sd, NULL,
+    // NULL,
+    //                                    &swapChain1);
+    // swapChain1->QueryInterface(IID_PPV_ARGS(&g_pSwapChain));
+    // swapChain1->Release();
+    // dxgiFactory->Release();
 
-    g_pSwapChain->SetMaximumFrameLatency(NUM_BACK_BUFFERS);
+    // g_pSwapChain->SetMaximumFrameLatency(NUM_BACK_BUFFERS);
 
-    g_hSwapChainWaitableObject = g_pSwapChain->GetFrameLatencyWaitableObject();
-    assert(g_hSwapChainWaitableObject != NULL);
+    // g_hSwapChainWaitableObject =
+    // g_pSwapChain->GetFrameLatencyWaitableObject();
+    // assert(g_hSwapChainWaitableObject != NULL);
+
+    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+    ThrowIfFailed(g_pSwapChain->GetDesc(&swapChainDesc));
+    ThrowIfFailed(g_pSwapChain->ResizeBuffers(
+        NUM_FRAMES_IN_FLIGHT, width, height, swapChainDesc.BufferDesc.Format,
+        swapChainDesc.Flags));
+    g_CurrentBackBufferIndex = g_pSwapChain->GetCurrentBackBufferIndex();
+    CreateRenderTarget();
 }
 
 struct ComputeShader {
@@ -1683,6 +1704,9 @@ void CleanupDeviceD3D() {
         }
     for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
         g_Textures[i].resource = nullptr;
+    }
+    for (int i = 0; i < NUM_FRAMES_IN_FLIGHT; ++i) {
+        g_CBVInFlight[i].clear();
     }
     for (int i = NUM_FRAMES_IN_FLIGHT; i < g_Textures.size(); ++i) {
         SAFE_RELEASE(g_Textures[i].resource);

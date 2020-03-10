@@ -7,6 +7,8 @@ add_library(FishEngine
     jsbinding.h jsbinding.c jsbinding.cpp jsbinding.hpp jsbinding.gen.cpp
     debug.h debug.c
     app.h app.c app.cpp
+    input.h input.c keycode.h
+    singleton_time.h singleton_time.c
     
     component.h ecs.h ecs.c
     transform.h transform.c
@@ -19,7 +21,7 @@ add_library(FishEngine
     mesh.h mesh.c vertexdecl.h
     texture.h texture.c
     material.h material.cpp material_internal.hpp
-    rhi.h 
+    rhi.h
     
     animation.h animation.c
     ddsloader.h ddsloader.c

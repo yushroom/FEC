@@ -2,6 +2,7 @@
 #define RENDER_D3D12_HPP
 
 #include <d3d12.h>
+#include "rhi.h"
 
 constexpr int NUM_FRAMES_IN_FLIGHT = 3;
 

@@ -237,13 +237,15 @@ export function LoadglTFFromFile(path) {
         for (let m of duck.materials) {
             let mat = new fe.Material();
             mat.SetShader(pbrMetallicRoughness);
+            let {emissiveFactor=[0, 0, 0, 1], alphaMode='OPAQUE', alphaCutoff=0.5, doubleSided=false} = m;
             if ('emissiveTexture' in m) {
                 const tid = m.emissiveTexture.index;
                 const tex = duck.textures[tid];
                 mat.EnableKeyword("HAS_EMISSIVEMAP");
                 mat.SetTexture("emissiveTexture", tex._texture);
-                mat.SetVector("emissiveFactor", [1, 1, 1, 1]);
+                emissiveFactor = [1, 1, 1, 1];
             }
+            mat.SetVector("emissiveFactor", emissiveFactor);
             if ('normalTexture' in m) {
                 const tid = m.normalTexture.index;
                 const tex = duck.textures[tid];
@@ -258,15 +260,9 @@ export function LoadglTFFromFile(path) {
                 mat.SetTexture("occlusionTexture", tex._texture);
                 mat.SetFloat("occlusionStrength", 1);
             }
-            if ('alphaMode' in m) {
-                if (m.alphaMode == "MASK") {
-                    mat.EnableKeyword("ALPHA_TEST");
-                    let alphaCutoff = 0.5;
-                    if ('alphaCutoff' in m) {
-                        alphaCutoff = m.alphaCutoff;
-                    }
-                    mat.SetFloat("alphaCutoff", alphaCutoff);
-                }
+            if (alphaMode == "MASK") {
+                mat.EnableKeyword("ALPHA_TEST");
+                mat.SetFloat("alphaCutoff", alphaCutoff);
             }
             if ('pbrMetallicRoughness' in m) {
                 if ('baseColorTexture' in m.pbrMetallicRoughness) {
@@ -275,28 +271,18 @@ export function LoadglTFFromFile(path) {
                     mat.mainTexture = tex._texture;
                     mat.EnableKeyword("HAS_BASECOLORMAP");
                     mat.SetTexture("baseColorTexture", tex._texture);
-                    mat.SetVector("baseColorFactor", [1, 1, 1, 1]);
                 }
                 if ('metallicRoughnessTexture' in m.pbrMetallicRoughness) {
                     const tid = m.pbrMetallicRoughness.metallicRoughnessTexture.index;
                     const tex = duck.textures[tid];
                     mat.EnableKeyword("HAS_METALROUGHNESSMAP");
                     mat.SetTexture("metallicRoughnessTexture", tex._texture);
-                    mat.SetFloat("metallicFactor", 1);
-                    mat.SetFloat("roughnessFactor", 1);
                 }
-                if ('baseColorFactor' in m.pbrMetallicRoughness) {
-                    mat.color = m.pbrMetallicRoughness.baseColorFactor;
-                    mat.SetVector("baseColorFactor", m.pbrMetallicRoughness.baseColorFactor);
-                }
-                if ('metallicFactor' in m.pbrMetallicRoughness) {
-                    const metallic = m.pbrMetallicRoughness.metallicFactor;
-                    mat.SetFloat("metallicFactor", metallic)
-                }
-                if ('roughnessFactor' in m.pbrMetallicRoughness) {
-                    const roughness = m.pbrMetallicRoughness.roughnessFactor;
-                    mat.SetFloat("roughnessFactor", roughness)
-                }
+                const {baseColorFactor=[1, 1, 1, 1], metallicFactor=1, roughnessFactor=1} = m.pbrMetallicRoughness;
+                mat.color = baseColorFactor;
+                mat.SetVector("baseColorFactor", baseColorFactor);
+                mat.SetFloat("metallicFactor", metallicFactor);
+                mat.SetFloat("roughnessFactor", roughnessFactor);
             }
 
             m._material = mat;

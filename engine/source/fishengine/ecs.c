@@ -1,6 +1,7 @@
 #include "ecs.h"
 
 #include "statistics.h"
+#include "string.h"
 
 static void ComponentArrayInit(ComponentArray *array, ComponentType type,
                                int classSize, int capacity) {
@@ -24,6 +25,7 @@ Entity WorldCreateEntity(World *w) {
 }
 
 void *EntityAddComponent(Entity e, World *w, ComponentType type) {
+    assert(type < w->def.componentDefCount);
     assert(e < w->entityCount);
     _Entity *_e = w->entities + e;
     int idx = _e->componentCount++;

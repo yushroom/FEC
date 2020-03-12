@@ -14,15 +14,17 @@
 #include "ddsloader.h"
 #include "debug.h"
 #include "ecs.h"
+#include "input.h"
 #include "jsbinding.h"
 #include "light.h"
 #include "mesh.h"
 #include "renderable.h"
 #include "rhi.h"
+#include "singleton_time.h"
+#include "singleton_selection.h"
 #include "statistics.h"
 #include "transform.h"
-#include "singleton_time.h"
-#include "input.h"
+#include "free_camera.h"
 
 #ifndef countof
 #define countof(x) (sizeof(x) / sizeof((x)[0]))
@@ -64,33 +66,24 @@ void RenderSystem(World *w) {
     }
 }
 
-#define COMP(T)                                                     \
+#define COMP(T)                                                        \
+    {                                                                  \
+        .type = T##ID, .name = #T, .size = sizeof(T), .ctor = T##Init, \
+        .dtor = NULL,                                                  \
+    }
+#define COMP2(T)                                                    \
     {                                                               \
         .type = T##ID, .name = #T, .size = sizeof(T), .ctor = NULL, \
         .dtor = NULL,                                               \
     }
 
-static ComponentDef g_componentDef[] = {
-    {.type = TransformID,
-     .name = "Transform",
-     .size = sizeof(Transform),
-     .ctor = TransformInit,
-     .dtor = NULL},
-    COMP(Renderable),
-    COMP(Camera),
-    COMP(Light),
-    {.type = AnimationID,
-     .name = "Animation",
-     .size = sizeof(Animation),
-     .ctor = AnimationInit,
-     .dtor = NULL},
-};
+static ComponentDef g_componentDef[] = {COMP(Transform), COMP(Renderable),
+                                        COMP(Camera),    COMP(Light),
+                                        COMP(Animation), COMP(FreeCamera)};
 
 static ComponentDef g_singleComponentDef[] = {
-    COMP(SingletonTransformManager),
-    COMP(SingletonInput),
-    COMP(SingletonTime),
-};
+    COMP(SingletonTransformManager), COMP(SingletonInput),
+    COMP2(SingletonTime), COMP(SingletonSelection)};
 
 #if 0
 
@@ -381,21 +374,18 @@ int app_init() {
 
     w = WorldCreate(&def);
     WorldAddSystem(w, AnimationSystem);
-    WorldAddSystem(w, TransformSystem);
+    WorldAddSystem(w, FreeCameraSystem);
     WorldAddSystem(w, RenderSystem);
     SingletonTransformManager *tm;
     {
-        // tm = aligned_alloc(16, sizeof(TransformManager));
-        tm = malloc(sizeof(SingletonTransformManager));
-        TransformManagerInit(tm);
-        WorldAddSingletonComponent(w, tm, SingletonTransformManagerID);
-
-        SingletonInput *si = malloc(sizeof(SingletonInput));
-        SingletonInputInit(si);
-        WorldAddSingletonComponent(w, si, SingletonInputID);
-
-        SingletonTime *st = malloc(sizeof(SingletonTime));
-        WorldAddSingletonComponent(w, st, SingletonTimeID);
+        for (int i = 0; i < countof(g_singleComponentDef); ++i) {
+            ComponentDef *def = &g_singleComponentDef[i];
+            void *scomp = malloc(def->size);
+            if (def->ctor) {
+                def->ctor(scomp);
+            }
+            WorldAddSingletonComponent(w, scomp, def->type);
+        }
     }
 
     SetDefaultWorld(w);
@@ -428,21 +418,17 @@ int app_reload() {
     // AssetDeleteAll();
 
     WorldAddSystem(w, AnimationSystem);
-    WorldAddSystem(w, TransformSystem);
+    WorldAddSystem(w, FreeCameraSystem);
     WorldAddSystem(w, RenderSystem);
     {
-        SingletonTransformManager *tm =
-            WorldGetSingletonComponent(w, SingletonTransformManagerID);
-        if (!tm) tm = aligned_alloc(16, sizeof(SingletonTransformManager));
-        TransformManagerInit(tm);
-        WorldAddSingletonComponent(w, tm, SingletonTransformManagerID);
-
-        SingletonInput *si = malloc(sizeof(SingletonInput));
-        SingletonInputInit(si);
-        WorldAddSingletonComponent(w, si, SingletonInputID);
-
-        SingletonTime *st = malloc(sizeof(SingletonTime));
-        WorldAddSingletonComponent(w, st, SingletonTimeID);
+        for (int i = 0; i < countof(g_singleComponentDef); ++i) {
+            ComponentDef *def = &g_singleComponentDef[i];
+            void *scomp = malloc(def->size);
+            if (def->ctor) {
+                def->ctor(scomp);
+            }
+            WorldAddSingletonComponent(w, scomp, def->type);
+        }
     }
     SetDefaultWorld(w);
 
@@ -494,7 +480,7 @@ int app_update() {
 }
 
 int app_frame_end() {
-    //SingletonInput *si = WorldGetSingletonComponent(w, SingletonInputID);
+    // SingletonInput *si = WorldGetSingletonComponent(w, SingletonInputID);
     InputSystemPostUpdate(w);
 }
 
@@ -560,11 +546,9 @@ void open_file_by_callstack(const uint8_t *callstack) {
         char command[1024] = {0};
 #if WIN32
         // https://stackoverflow.com/questions/2642551/windows-c-system-call-with-spaces-in-command
-        strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
-        // strcat(command,
-        // "\"\"C:\\Users\\yushroom\\AppData\\Local\\Programs\\Microsoft VS
-        // Code\\Code.exe\" -g \"");
-
+        //strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
+        strcat(command,
+               "\"\"C:\\Users\\yushroom\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" -g \"");
 #else
         strcat(command,
                "\"/Applications/Sublime "

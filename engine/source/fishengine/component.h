@@ -7,6 +7,7 @@ enum ComponentID {
     CameraID,
     LightID,
     AnimationID,
+    FreeCameraID,
 };
 
 enum SingletonComponentID {

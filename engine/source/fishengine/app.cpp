@@ -15,6 +15,7 @@
 #include "ddsloader.h"
 #include "shader_internal.hpp"
 #include "material_internal.hpp"
+#include "singleton_selection.h"
 
 extern "C" {
 void HierarchyWindow(World *w);
@@ -32,15 +33,13 @@ static World *world;
 
 void hierarchy_impl(uint32_t id) {
     if (id == 0) return;
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            world, SingletonTransformManagerID);
+    Transform *t = TransformGet(world, id);
     ImGui::PushID(id);
     ImGuiTreeNodeFlags flags =
         ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow |
         ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanFullWidth;
     if (selectedEntity == id) flags |= ImGuiTreeNodeFlags_Selected;
-    bool isLeaf = tm->H[id].firstChild == 0;
+    bool isLeaf = t->firstChild == 0;
     if (isLeaf) {
         flags |= ImGuiTreeNodeFlags_Leaf;
     }
@@ -53,13 +52,13 @@ void hierarchy_impl(uint32_t id) {
     bool clicked = ImGui::IsItemClicked(0) || ImGui::IsItemFocused();
     if (open) {
         if (!isLeaf) {
-            hierarchy_impl(tm->H[id].firstChild);
+            hierarchy_impl(t->firstChild);
         }
         ImGui::TreePop();
     }
     ImGui::PopID();
 
-    hierarchy_impl(tm->H[id].nextSibling);
+    hierarchy_impl(t->nextSibling);
 
     if (clicked) selectedEntity = id;
 }
@@ -69,10 +68,10 @@ constexpr float toolbarHeight = 40;
 
 void HierarchyWindow(World *w) {
     world = w;
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            world, SingletonTransformManagerID);
-
+    SingletonSelection *selection =
+        (SingletonSelection *)WorldGetSingletonComponent(w,
+                                                         SingletonSelectionID);
+    selectedEntity = selection->selectedEntity;
     auto size = ImGui::GetIO().DisplaySize;
     float height = (size.y - toolbarHeight) / 2;
     ImGui::SetNextWindowSize(ImVec2(width, height));
@@ -80,10 +79,11 @@ void HierarchyWindow(World *w) {
     ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 8);
     ImGui::Begin("Hierarchy");
     for (int i = 1; i < w->componentArrays[TransformID].m.size; ++i) {
-        if (tm->H[i].parent == 0) hierarchy_impl(i);
+        if (TransformGet(w, i)->parent == 0) hierarchy_impl(i);
     }
     ImGui::End();
     ImGui::PopStyleVar();
+    selection->selectedEntity = selectedEntity;
 }
 
 #define IMGUI_DEFINE_MATH_OPERATORS
@@ -248,7 +248,7 @@ void InspectorWindow(World *w) {
         uint32_t idx = WorldGetComponentIndex(w, t, TransformID);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 2));
         if (ImGui::InputFloat3("position", &t->localPosition.x)) {
-            TransformSetDirty(tm, idx);
+            TransformSetDirty(w, t);
         }
         auto eulerHint = tm->LocalEulerAnglesHints[idx];
         float3 euler;
@@ -260,19 +260,24 @@ void InspectorWindow(World *w) {
         if (ImGui::InputFloat3("rotation", &euler.x)) {
             t->localRotation = euler_to_quat(euler);
             tm->LocalEulerAnglesHints[idx] = euler;
-            TransformSetDirty(tm, idx);
+            TransformSetDirty(w, t);
         }
         if (ImGui::InputFloat3("scale", &t->localScale.x)) {
-            TransformSetDirty(tm, idx);
+            TransformSetDirty(w, t);
         }
         if (inspector_debug_mode) {
-            float3 position = TransformGetPosition(tm, w, selectedEntity);
+
+            ImGui::Text("parent: %u", t->parent);
+            ImGui::Text("firstChild: %u", t->firstChild);
+            ImGui::Text("nextSibling: %u", t->nextSibling);
+
+            float3 position = TransformGetPosition(w, t);
             ImGui::InputFloat3("wposition", &position.x);
 
             float4 q = t->localRotation;
             if (ImGui::InputFloat4("qrotation", (float *)&q)) {
                 t->localRotation = q;
-                TransformSetDirty(tm, idx);
+                TransformSetDirty(w, t);
             }
 
             ImGui::Text("tm.mod: %u", tm->modified);

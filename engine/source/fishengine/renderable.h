@@ -10,6 +10,8 @@ struct Renderable {
     Skin *skin;
     uint32_t bonesBuffer;
     //    array bones;  // vector<float4x4>;
+
+    Entity boneToEntity[128];
 };
 typedef struct Renderable Renderable;
 

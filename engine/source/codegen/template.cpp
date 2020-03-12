@@ -1,91 +1,71 @@
 #include "jsbinding.hpp"
 #include "animation.h"
- class Transform {
-     Transform *parent {
-         getter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
-            uint32_t p = TransformGetParent(tm, index);
-            if (p == 0) return JS_NULL;
-            value = (Transform *)array_at(&a->m, p);
-         }}
-         setter {{
-            SingletonTransformManager* tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray* a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
-            uint32_t parent = array_get_index(&a->m, value);
-            const uint32_t child = index;
-            TransformSetParent(tm, child, parent);
+
+// class Component {
+//     Entity entity {
+//         getter {{
+//             ComponentGetEntity(defaultWorld, self, type);
+//         }}
+//     }
+// };
+
+class Transform {
+    Transform *parent {
+        getter {{
+            value = TransformGetParent(defaultWorld, self);
         }}
-     }
-     float3 localPosition {
-         getter;
-         setter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
+        setter {{
+            TransformSetParent(defaultWorld, self, value);
+        }}
+    }
+    float3 localPosition {
+        getter;
+        setter {{
             self->localPosition = value;
-            TransformSetDirty(tm, index);
-         }}
-     }
-     quat localRotation {
-         getter;
-         setter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
+            TransformSetDirty(defaultWorld, self);
+        }}
+    }
+    quat localRotation {
+        getter;
+        setter {{
             self->localRotation = value;
-            TransformSetDirty(tm, index);
-         }}
-     }
-     float3 localEulerAngles {
-         getter {{
+            TransformSetDirty(defaultWorld, self);
+        }}
+    }
+    float3 localEulerAngles {
+        getter {{
             value = quat_to_euler(self->localRotation);
-         }}
-         setter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
+        }}
+        setter {{
             self->localRotation = euler_to_quat(value);
-            TransformSetDirty(tm, index);
-         }}
-     }
-     float3 localScale {
-         getter;
-         setter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
+            TransformSetDirty(defaultWorld, self);
+        }}
+    }
+    float3 localScale {
+        getter;
+        setter {{
             self->localScale = value;
-            TransformSetDirty(tm, index);
-         }}
-     }
-     float3 position {
-         getter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(
-                defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
-            value = TransformGetPosition(tm, defaultWorld, index);
-         }}
-     }
-     float4x4 localMatrix {
-         setter {{
-            SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-            ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-            uint32_t index = array_get_index(&a->m, self);
+            TransformSetDirty(defaultWorld, self);
+        }}
+    }
+    float3 position {
+        getter {{
+            value = TransformGetPosition(defaultWorld, self);
+        }}
+    }
+    float4x4 localMatrix {
+        setter {{
             float4x4_decompose(&value, &self->localPosition, &self->localRotation,
-                               &self->localScale);
-            TransformSetDirty(tm, index);
-         }}
-     }
-     void LookAt(float3 target) {{
-        SingletonTransformManager *tm = (SingletonTransformManager *)WorldGetSingletonComponent(defaultWorld, SingletonTransformManagerID);
-        ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-        uint32_t index = array_get_index(&a->m, self);
-        TransformLookAt(tm, defaultWorld, index, target);
-     }}
+                                &self->localScale);
+            TransformSetDirty(defaultWorld, self);
+        }}
+    }
+    void LookAt(float3 target) {{
+        TransformLookAt(defaultWorld, self, target);
+    }}
+    void Translate(float3 translate, enum Space space) {{
+        TransformTranslate(defaultWorld, self, translate, space);
+    }}
  };
 
 // class _Entity {
@@ -96,6 +76,10 @@ class Camera {
     float fieldOfView;
     float nearClipPlane;
     float farClipPlane;
+
+    static Camera *GetMainCamera() {{
+        ret = CameraGetMainCamera(defaultWorld);
+    }}
 };
 
 class Texture {
@@ -132,12 +116,11 @@ class Shader {
 
 class Skin {
     Entity root;
+    uint32_t minJoint;
+
     ctor() {{
         self = SkinNew();
     }}
-    // dtor() {{
-    //     free(self);
-    // }}
     TypedArray inverseBindMatrices {
         setter {{
             assert(self->inverseBindMatrices.stride == sizeof(float4x4));
@@ -168,8 +151,6 @@ class Skin {
 class Mesh {
     // constuctor has no parameters
     ctor() {{
-        // AssetID aid;
-        // self = (Mesh *)AssetNew(AssetTypeMesh, &aid);
         self = (Mesh *)MeshNew();
         self->refcount = 1;
     }}
@@ -253,6 +234,12 @@ class Renderable {
             RenderableSetMesh(self, value);
         }}
     }
+
+    void MapBoneToEntity(uint32_t bone, uint32_t entity) {{
+        assert(bone < 128);
+        self->boneToEntity[bone] = entity;
+    }}
+
     Material *material;
     Skin *skin;
 };
@@ -305,8 +292,30 @@ class Animation {
     void AddClip(AnimationClip *clip) {{
         AnimationAddClip(self, clip);
     }}
+    void SetEntityOffset(int entityOffset) {{
+        self->entityOffset = entityOffset;
+    }}
+    void SetEntityRemap(uint32_t e1, int e2) {{
+        assert(e1 < 512);
+        self->entityRemap[e1] = e2;
+    }}
 };
 
 class Light {
     enum LightType type;
+};
+
+class SingletonInput {
+    bool GetKeyDown(enum KeyCode code) {{
+        ret = IsButtonPressed(self, code);
+    }}
+    bool GetKeyUp(enum KeyCode code) {{
+        ret = IsButtonReleased(self, code);
+    }}
+    bool GetKey(enum KeyCode code) {{
+        ret = IsButtonHeld(self, code);
+    }}
+    float GetAxis(enum Axis axis) {{
+        ret = self->axis[axis];
+    }}
 };

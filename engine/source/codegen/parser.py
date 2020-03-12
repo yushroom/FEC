@@ -3,6 +3,7 @@ keywords = {
     'uint32_t': 'UINT32',
     'float': 'FLOAT',
     'string': 'STRING',
+    'bool': 'BOOL',
     'ArrayBuffer': 'ARRAY_BUFFER',
     'TypedArray': 'TYPED_ARRAY',
     'Array': 'ARRAY',
@@ -20,7 +21,6 @@ keywords = {
     'enum': 'ENUM',
     'include': 'INCLUDE',
     'static': 'STATIC',
-    'fn': 'FN',
 }
 
 tokens = (
@@ -41,7 +41,7 @@ def t_CODE(t):
 
 def t_INCLUDE(t):
     r'\#include\s\".*\"'
-    print(t)
+    # print(t)
     return t
 
 literals = '{}();,*'
@@ -155,6 +155,16 @@ def p_class(p):
     klasses.append(klass)
     klass = make_empty_class()
 
+def p_empty_class(p):
+    '''class : CLASS class_name '{' '}' ';'
+    '''
+    p[0] = (p[2], [])
+    # print('class', p[2])
+    global klass
+    klass['name'] = p[2]
+    klasses.append(klass)
+    klass = make_empty_class()
+
 def p_class_name(p):
     '''class_name : IDENT
     '''
@@ -261,29 +271,16 @@ def p_static_function(p):
     klass['static_functions'].append( p[2] )
 
 def p_function(p):
-    '''function : ret IDENT '(' ')' CODE
-        | ret IDENT '(' function_params ')' CODE
+    '''function : type_dec IDENT '(' ')' CODE
+                | VOID IDENT '(' ')' CODE
     '''
-    # global klass
-    if len(p) == 6:
-        # print('function without params', p[2])
-        # p[0] = (p[2], [], p[5])
-        p[0] = {'name': p[2], 'code': p[5], 'params': [], 'ret': p[1]}
-        # klass['functions'].append({
-        #     'name': p[2],
-        #     'code': p[5],
-        #     'params': [],
-        #     'ret': p[1],
-        #     })
-    else:
-        # print('function', p[2], p[4])
-        p[0] = {'name': p[2], 'code': p[6], 'params': p[4], 'ret': p[1]}
-        # klass['functions'].append({
-        #     'name': p[2],
-        #     'code': p[6],
-        #     'params': p[4],
-        #     'ret': p[1],
-        #     })
+    p[0] = {'name': p[2], 'code': p[5], 'params': [], 'ret': p[1]}
+
+def p_function_with_params(p):
+    '''function : type_dec IDENT '(' function_params ')' CODE
+                | VOID IDENT '(' function_params ')' CODE
+    '''
+    p[0] = {'name': p[2], 'code': p[6], 'params': p[4], 'ret': p[1]}
 
 def p_function_params(p):
     '''function_params : function_param
@@ -294,16 +291,6 @@ def p_function_params(p):
         p[1].append(p[3])
     else:
         p[0] = [p[1]]
-
-def p_ret(p):
-    '''ret : type_dec
-        | VOID
-    '''
-    # note: we use fn prefix to avoid amibiguity with property def
-    if len(p) == 2:
-        p[0] = p[1]
-    else:
-        p[0] = p[2]
 
 def p_function_param(p):
     '''function_param : type_dec IDENT'''
@@ -332,6 +319,7 @@ def p_type_internal_dec(p):
         | QUAT
         | FLOAT4X4
         | STRING
+        | BOOL
     '''
     p[0] = p[1]
 
@@ -375,5 +363,4 @@ parser.parse(data, debug=False)
 import json
 
 with open('classes.json', 'w') as f:
-    # print(json.dumps(klasses, indent=2), file=f)
     f.write(json.dumps(klasses, indent=2))

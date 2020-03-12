@@ -15,7 +15,6 @@ for (const m of models) {
     }
 }
 
-
 globalThis.renderUI = ()=>{
     const oldSelected = selectedModel;
     imgui.Begin("glTF-Sample-Models");
@@ -42,7 +41,7 @@ globalThis.renderUI = ()=>{
                 duck = LoadglTFFromFile(path);
                 loaded.set(selectedModel, duck);
             }
-            duck.Instantiate();
+            duck.Instantiate(fe.GetDefaultWorld());
         }
     }
 }

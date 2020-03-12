@@ -23,7 +23,7 @@ struct AnimationCurve {
     enum AnimationCurveType type;
     array input;
     array output;
-    Entity target;
+    uint32_t target;
 
     // private
     int lastIndex;  // cache
@@ -57,12 +57,16 @@ typedef struct AnimationClip AnimationClip;
 
 AnimationClip *AnimationClipNew();
 void AnimationClipFree(void *clip);
+AnimationCurve *AnimaitonClipGetCurve(AnimationClip *clip, uint32_t curveIndex);
 
 struct Animation {
     double localTime;
     float length;
     array clips;  // std::vector<AnimationClip>
     bool playing;
+
+    Entity entityOffset;
+    Entity entityRemap[128];
 };
 typedef struct Animation Animation;
 

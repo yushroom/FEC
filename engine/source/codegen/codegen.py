@@ -158,9 +158,9 @@ tpl = Template(tpl)
 tpl_export = r'''
 int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
 %for c in classes:
-%if c['ctor']:
+
     {
-		JSValue proto, _class;
+		JSValue proto;
 		JSClassID class_id = 0;
 		JS_NewClassID(&class_id);
 		js_fe_${c['name']}_class_id = class_id;
@@ -168,17 +168,21 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
 		proto = JS_NewObject(ctx);
 		JS_SetPropertyFunctionList(ctx, proto, js_fe_${c['name']}_proto_funcs, countof(js_fe_${c['name']}_proto_funcs));
 		JS_SetClassProto(ctx, class_id, proto);
+%if c['ctor'] or len(c['static_functions']):
+		JSValue _class;
 		const char *class_name = "${c['name']}";
+%if c['ctor']:
 		_class = JS_NewCFunction2(ctx, js_fe_${c['name']}_ctor, class_name, 0, JS_CFUNC_constructor, 0);
 		JS_SetConstructor(ctx, _class, proto);
+%else:
+		_class = JS_NewCFunction2(ctx, NULL, class_name, 0, JS_CFUNC_constructor, 0);
+%endif
 %for f in c['static_functions']:
         JS_SetPropertyStr(ctx, _class, "${f['name']}", JS_NewCFunction(ctx, js_fe_${c['name']}_${f['name']}, "${f['name']}", ${len(f['params'])}));
 %endfor
 		JS_SetModuleExport(ctx, m, class_name, _class);
-	}
-%else:
-    CreateClass(${c['name']});
 %endif
+	}
 %endfor
     return 0;
 }
@@ -255,15 +259,7 @@ output += r'''
 extern "C" {
 int js_init_module_fishengine_extra(JSContext *ctx, JSModuleDef *m);
 int js_fe_init_extra(JSContext *ctx, JSModuleDef *m);
-JSClassID js_def_class(JSContext *ctx, JSClassDef *class_def,
-                       const JSCFunctionListEntry proto_funcs[],
-                       int proto_func_count);
 }
-
-#define CreateClass(name)                                                    \
-    js_fe_##name##_class_id =                                                \
-        js_def_class(ctx, &js_fe_##name##_class, js_fe_##name##_proto_funcs, \
-                     countof(js_fe_##name##_proto_funcs))
 '''
 
 output += tpl_export.render(classes=classes)

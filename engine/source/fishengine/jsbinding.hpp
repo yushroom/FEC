@@ -205,6 +205,11 @@ inline JSValue JSValueFrom<uint32_t>(JSContext *ctx, uint32_t v) {
     return JS_NewInt32(ctx, v);
 }
 
+template <>
+inline JSValue JSValueFrom<bool>(JSContext *ctx, bool v) {
+    return JS_NewBool(ctx, v);
+}
+
 template <typename T>
 inline JSValue JSValueFrom(JSContext *ctx,
                            std::enable_if_t<std::is_enum_v<T>, T> v) {
@@ -284,5 +289,6 @@ static inline void array_from_TypedArray(array *a, TypedArray *ta) {
 #include "mesh.h"
 #include "renderable.h"
 #include "texture.h"
+#include "input.h"
 
 #endif /* JSBINDING_HPP */

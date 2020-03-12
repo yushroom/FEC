@@ -9,6 +9,8 @@ add_library(FishEngine
     app.h app.c app.cpp
     input.h input.c keycode.h
     singleton_time.h singleton_time.c
+    singleton_selection.h
+    free_camera.h free_camera.c
     
     component.h ecs.h ecs.c
     transform.h transform.c

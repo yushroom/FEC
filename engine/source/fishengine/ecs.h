@@ -112,6 +112,7 @@ void WorldAddSingletonComponent(World *w, void *comp, int ID);
 void *WorldGetSingletonComponent(World *w, int ID);
 static inline void *WorldGetComponentAt(World *w, ComponentType type,
                                         uint32_t idx) {
+    if (idx >= w->componentArrays[type].m.size) return NULL;
     return array_at(&w->componentArrays[type].m, idx);
 }
 void WorldTick(World *w);

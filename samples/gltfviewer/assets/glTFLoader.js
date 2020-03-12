@@ -2,6 +2,7 @@ import * as os from 'os';
 import * as std from 'std';
 import * as fe from 'FishEngine';
 import {assert, print2, LoadFileAsJSON} from './utils.js'
+import {FreeCamera, FreeCameraSystem} from './FreeCamera.js'
 
 const PATH_SEP = "\\";
 
@@ -66,14 +67,24 @@ export class glTF {
             if ('mesh' in n) {
                 const m = duck.meshes[n.mesh];
                 let skin = null;
-                if ('skin' in n)
-                    skin = duck.skins[n.skin]._skin;
+                let joints = [];
+                if ('skin' in n) {
+                    const _s = duck.skins[n.skin]
+                    skin = _s._skin;
+                    joints = _s.joints;
+                }
                 if (m.primitives.length == 1) {
                     const p = m.primitives[0];
                     if (!('combined' in p._mesh)) {
                         const renderable = n.entity.AddComponent(fe.RenderableID);
                         renderable.mesh = p._mesh;
-                        renderable.skin = skin;
+                        if (skin) {
+                            renderable.skin = skin;
+                            const offset = skin.minJoint;
+                            for (const bone of joints) {
+                                renderable.MapBoneToEntity(bone-offset, duck.nodes[bone].entity.GetID());
+                            }
+                        }
                         if ('material' in p)
                             renderable.material = duck.materials[p.material]._material;
                     }
@@ -84,7 +95,13 @@ export class glTF {
                             child.transform.parent = n.entity.transform;
                             const renderable = child.AddComponent(fe.RenderableID);
                             renderable.mesh = p._mesh;
-                            renderable.skin = skin;
+                            if (skin) {
+                                renderable.skin = skin;
+                                const offset = skin.minJoint;
+                                for (const bone of joints) {
+                                    renderable.MapBoneToEntity(bone-offset, duck.nodes[bone].entity.GetID());
+                                }
+                            }
                             if ('material' in p)
                                 renderable.material = duck.materials[p.material]._material;
                         }
@@ -97,12 +114,19 @@ export class glTF {
             for (const a of duck.animations) {
                 const root = duck.nodes[0].entity;
                 let animation = root.GetComponent(fe.AnimationID);
+                print(a._targets);
+                const minNode = Math.min(...a._targets);
+                //const entityOffset = minNode;
                 if (animation) {
                     let e = CreateEntity();
                     e.transform.parent = root.transform;
                     animation = e.AddComponent(fe.AnimationID);
                 } else {
                     animation = root.AddComponent(fe.AnimationID);
+                }
+                animation.SetEntityOffset(minNode);
+                for (const i of a._targets) {
+                    animation.SetEntityRemap(i-minNode, duck.nodes[i].entity.GetID());
                 }
                 animation.AddClip(a._clip);
             }
@@ -119,6 +143,8 @@ export class glTF {
             e.name = "MainCamera";
             e.AddComponent(fe.CameraID);
             e.transform.localPosition = [0, 1, 10];
+            e.AddComponent(fe.FreeCameraID);
+            //world.AddSystem(FreeCameraSystem);
         }
     
         {
@@ -188,7 +214,7 @@ export function LoadglTFFromFile(path) {
     if (samplers) {
         for (let sampler of samplers) {
             // TODO: magFilter
-            const {minFilter, wrapS=10497, wrapT=10497} = sampler;
+            const {minFilter, wrapS=GL.REPEAT, wrapT=GL.REPEAT} = sampler;
             let params = {}
             if (minFilter) {
                 if (minFilter === GL.NEAREST || minFilter === GL.NEAREST_MIPMAP_NEAREST) {
@@ -411,24 +437,28 @@ export function LoadglTFFromFile(path) {
             // skin.root = duck.nodes[s.skeleton].entity.GetID();
             let joints = new Uint32Array(s.joints.length);
             s.joints.forEach((x, i)=>{
-                joints[i] = duck.nodes[x].entity.GetID();
+                joints[i] = x;
             })
-            print(joints);
             skin.joints = joints;
+            skin.minJoint = Math.min(...s.joints);
             s._skin = skin;
         }
     }
 
     if ('animations' in duck) {
         for (let a of duck.animations) {
-            var clip = new fe.AnimationClip();
+            let clip = new fe.AnimationClip();
+            let targets = [];
             for (const channel of a.channels) {
                 let target = channel.target.node;
+                targets.push(target);
                 const sampler = a.samplers[channel.sampler];
                 const input = AccessorToTypedArray(sampler.input);
                 const output = AccessorToTypedArray(sampler.output);
                 clip.SetCurve(target, input, output, channel.target.path);
             }
+            print(targets);
+            a._targets = targets;
             a._clip = clip;
         }
     }

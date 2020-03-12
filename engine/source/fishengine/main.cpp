@@ -39,9 +39,40 @@ static void glfw_key_callback(GLFWwindow* window, int key, int scancode,
 
     SingletonInput *si = (SingletonInput *)WorldGetSingletonComponent(defaultWorld, SingletonInputID);
     KeyEvent e;
+    if (action != GLFW_PRESS && action != GLFW_RELEASE) return;
     e.action = action == GLFW_PRESS ? KeyActionPressed : KeyActionReleased;
     e.key = KeyCodeFromGLFWKey(key);
     SingletonInputPostKeyEvent(si, e);
+
+}
+
+static void glfw_mouse_button_callback(GLFWwindow* window, int button,
+                                       int action, int mods) {
+    KeyEvent e;
+    if (action == GLFW_PRESS) {
+        e.action = KeyActionPressed;
+    } else if (action == GLFW_RELEASE) {
+        e.action = KeyActionReleased;
+    } else {
+        return;
+    }
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+        e.key = KeyCodeMouseLeftButton;
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        e.key = KeyCodeMouseRightButton;
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+        e.key = KeyCodeMouseMiddleButton;
+    else
+        return;
+    SingletonInput* si = (SingletonInput*)WorldGetSingletonComponent(
+        defaultWorld, SingletonInputID);
+    SingletonInputPostKeyEvent(si, e);
+}
+
+void glfw_scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+    SingletonInput* si = (SingletonInput*)WorldGetSingletonComponent(
+        defaultWorld, SingletonInputID);
+    SingletonInputUpdateAxis(si, AxisMouseScrollWheel, yoffset);
 }
 
 static void glfw_resize_callback(GLFWwindow* window, int width, int height) {
@@ -69,6 +100,8 @@ int main(int, char**)
 
     glfwSetKeyCallback(window, glfw_key_callback);
     glfwSetWindowSizeCallback(window, glfw_resize_callback);
+    glfwSetMouseButtonCallback(window, glfw_mouse_button_callback);
+    glfwSetScrollCallback(window, glfw_scroll_callback);
 
     HWND hwnd = glfwGetWin32Window(window);
     // Initialize Direct3D
@@ -108,8 +141,6 @@ int main(int, char**)
     }
 
     app_init();
-    SingletonInput* si = (SingletonInput*)WorldGetSingletonComponent(
-        defaultWorld, SingletonInputID);
 
     // Our state
     bool show_demo_window = true;
@@ -126,10 +157,10 @@ int main(int, char**)
 
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
-        si->mousePositionRawX = xpos;
-        si->mousePositionRawY = ypos;
-        si->mousePositionX = xpos / width;
-        si->mousePositionY = ypos / height;
+
+        SingletonInput* si = (SingletonInput*)WorldGetSingletonComponent(
+            defaultWorld, SingletonInputID);
+        SingletonInputSetMousePosition(si, xpos/width, 1 - ypos/height);
 
         FrameBegin();
 

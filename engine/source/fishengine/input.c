@@ -18,6 +18,13 @@ void SingletonInputPostKeyEvent(SingletonInput* si, KeyEvent e) {
     si->keyStates[e.key] = e.action;
 }
 
+void SingletonInputSetMousePosition(SingletonInput* si, float x, float y) {
+    si->axis[AxisMouseX] = x - si->mousePositionX;
+    si->axis[AxisMouseY] = y - si->mousePositionY;
+    si->mousePositionX = x;
+    si->mousePositionY = y;
+}
+
 #include "ecs.h"
 #include "singleton_time.h"
 
@@ -54,6 +61,25 @@ KeyCode KeyCodeFromGLFWKey(int glfwKey) {
             break;
         case GLFW_KEY_A ... GLFW_KEY_Z:
             key = (KeyCodeA - GLFW_KEY_A) + glfwKey;
+            break;
+        case GLFW_KEY_LEFT_CONTROL:
+            key = KeyCodeLeftControl;
+            break;
+        case GLFW_KEY_RIGHT_CONTROL:
+            key = KeyCodeRightControl;
+            break;
+        case GLFW_KEY_LEFT_SHIFT:
+            key = KeyCodeLeftShift;
+            break;
+        case GLFW_KEY_RIGHT_SHIFT:
+            key = KeyCodeRightShift;
+            break;
+        case GLFW_KEY_LEFT_ALT:
+            key = KeyCodeLeftAlt;
+            break;
+        case GLFW_KEY_RIGHT_ALT:
+            key = KeyCodeRightAlt;
+            break;
         default:
             break;
     }

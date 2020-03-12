@@ -764,21 +764,18 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
 
     World* w = defaultWorld;
     Camera* camera = CameraGetMainCamera(w);
+    if (camera == NULL) return 1;
     Entity cameraEntity = ComponentGetEntity(w, camera, CameraID);
-    SingletonTransformManager* tm =
-        (SingletonTransformManager*)WorldGetSingletonComponent(
-            w, SingletonTransformManagerID);
 
-    uint32_t tindex = WorldGetComponentIndex(w, t, TransformID);
-
-    float4x4 l2w = TransformGetLocalToWorldMatrix(tm, w, tindex);
+    float4x4 l2w = TransformGetLocalToWorldMatrix(w, t);
 
     float4x4 view;
     float3 cameraPos, cameraDir;
     {
-        cameraDir = TransformGetForward(tm, w, cameraEntity);
-        cameraPos = TransformGetPosition(tm, w, cameraEntity);
-        float3 up = TransformGetUp(tm, w, cameraEntity);
+        Transform* cameraT = (Transform *)EntityGetComponent(cameraEntity, w, TransformID);
+        cameraDir = TransformGetForward(w, cameraT);
+        cameraPos = TransformGetPosition(w, cameraT);
+        float3 up = TransformGetUp(w, cameraT);
         view = float4x4_look_to(cameraPos, cameraDir, up);
         //		float4x4 camera2world =
         // TransformGetLocalToWorldMatrix(tm, w, cameraEntity);
@@ -812,8 +809,8 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
     {
         Light* light = (Light*)WorldGetComponentAt(w, LightID, 0);
         Entity lightEntity = ComponentGetEntity(w, light, LightID);
-        float3 p = TransformGetPosition(tm, w, lightEntity);
-        float3 f = TransformGetForward(tm, w, lightEntity);
+        float3 p = TransformGetPosition(w, TransformGet(w, lightEntity));
+        float3 f = TransformGetForward(w, TransformGet(w, lightEntity));
         g_cbuffers.cb3.LightPos = float4_make(p.x, p.y, p.z, 1);
         g_cbuffers.cb3.LightDir = float4_make(-f.x, -f.y, -f.z, 0);
     }
@@ -1222,7 +1219,7 @@ bool CreateDeviceD3D(HWND hWnd) {
     {
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-        desc.NumDescriptors = 16;
+        desc.NumDescriptors = 128;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         g_DSVDescriptorHeap = new DirectX::DescriptorPile(g_Device, &desc);
     }
@@ -1572,7 +1569,7 @@ ComputeShader* ComputeShader::Find(const char* name) {
     s->m_Name = name;
     s->m_Kernels.emplace_back();
     std::string path =
-        R"(E:\workspace\cengine\engine\shaders\runtime\Internal-Skinning_cs.cso)";
+        R"(E:\workspace\cengine\engine\shaders\runtime\d3d\Internal-Skinning_cs.cso)";
     s->m_Kernels[0].handle = CreateShaderFromCompiledFile(path.c_str());
     return s;
 }

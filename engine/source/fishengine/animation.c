@@ -68,8 +68,6 @@ quat AnimationCurveEvaluateQuat(AnimationCurve *curve, float time,
 }
 
 void AnimationPlay(World *w, Animation *a) {
-    SingletonTransformManager *tm =
-        WorldGetSingletonComponent(w, SingletonTransformManagerID);
     for (int i = 0; i < a->clips.size; ++i) {
         AnimationClip *clip = array_at(&a->clips, i);
         for (int j = 0; j < clip->curves.size; ++j) {
@@ -77,25 +75,26 @@ void AnimationPlay(World *w, Animation *a) {
             if (curve->type == AnimationCurveTypeTranslation ||
                 curve->type == AnimationCurveTypeRotation ||
                 curve->type == AnimationCurveTypeScale) {
-                Transform *t =
-                    EntityGetComponent(curve->target, w, TransformID);
+                assert(curve->target >= a->entityOffset);
+                Entity target = a->entityRemap[curve->target - a->entityOffset];
+                Transform *t = EntityGetComponent(target, w, TransformID);
                 uint32_t idx = WorldGetComponentIndex(w, t, TransformID);
                 switch (curve->type) {
                     case AnimationCurveTypeTranslation:
                         t->localPosition = AnimationCurveEvaluateFloat3(
                             curve, a->localTime, t->localPosition);
-                        TransformSetDirty(tm, idx);
+                        TransformSetDirty(w, TransformGet(w, idx));
                         break;
                     case AnimationCurveTypeRotation:
                         t->localRotation = AnimationCurveEvaluateQuat(
                             curve, a->localTime, t->localRotation);
                         t->localRotation = quat_normalize(t->localRotation);
-                        TransformSetDirty(tm, idx);
+                        TransformSetDirty(w, TransformGet(w, idx));
                         break;
                     case AnimationCurveTypeScale:
                         t->localScale = AnimationCurveEvaluateFloat3(
                             curve, a->localTime, t->localScale);
-                        TransformSetDirty(tm, idx);
+                        TransformSetDirty(w, TransformGet(w, idx));
                         break;
                     case AnimationCurveTypeWeights:
                         break;
@@ -124,6 +123,13 @@ void AnimationClipFree(void *c) {
     }
     array_free(&clip->curves);
     free(c);
+}
+
+AnimationCurve* AnimaitonClipGetCurve(AnimationClip* clip,
+    uint32_t curveIndex) {
+    assert(curveIndex < clip->curves.size);
+    AnimationCurve *curves = clip->curves.ptr;
+    return curves + curveIndex;
 }
 
 void AnimationInit(Animation *a) {

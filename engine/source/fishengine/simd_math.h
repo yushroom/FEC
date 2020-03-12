@@ -19,6 +19,8 @@ typedef struct {
     float x, y, z;
 } float3;
 
+#define float3_zero \
+    (float3) { 0, 0, 0 }
 #define float3_forward \
     (float3) { 0, 0, -1 }
 #define float3_up \
@@ -37,6 +39,9 @@ typedef __declspec(align(16)) struct { float x, y, z, w; } float4;
 #endif
 
 typedef float4 quat;
+
+#define quat_identity \
+    (quat) {0, 0, 0, 1}
 
 #define float4_zero \
     (float4) { 0, 0, 0, 0 }
@@ -113,15 +118,17 @@ static inline float3 float3_mul1(float3 a, float b) {
     return r;
 }
 
+static inline float float3_length(float3 v) {
+    return sqrt(float3_dot(v, v));
+}
+
 static inline float3 float3_normalize(float3 v) {
-    float num = sqrt(float3_dot(v, v));
-    if (num > 1e-5f) {
-        num = 1.f / num;
-        float3 o = {v.x * num, v.y * num, v.z * num};
-        return o;
+    float len = float3_length(v);
+    if (len > 1e-5f) {
+        float inv_len = 1.f / len;
+        return float3_mul1(v, inv_len);
     }
-    float3 o = {0, 0, 0};
-    return o;
+    return float3_zero;
 }
 
 static float _lerp(float a, float b, float t) { return a + (b - a) * t; }
@@ -295,16 +302,16 @@ static inline float4x4 float4x4_mul(float4x4 a, float4x4 b) {
     //	return o;
 }
 
-static inline float3 float4x4_mul_vector(const float4x4 *m, float3 v) {
+static inline float3 float4x4_mul_vector(const float4x4 m, float3 v) {
     float4 _v = {v.x, v.y, v.z, 0};
-    _v = float4x4_mul_float4(*m, _v);
+    _v = float4x4_mul_float4(m, _v);
     float3 r = {_v.x, _v.y, _v.z};
     return r;
 }
 
-static inline float3 float4x4_mul_point(const float4x4 *m, float3 v) {
+static inline float3 float4x4_mul_point(const float4x4 m, float3 v) {
     float4 _v = {v.x, v.y, v.z, 1.f};
-    _v = float4x4_mul_float4(*m, _v);
+    _v = float4x4_mul_float4(m, _v);
     if (fabsf(_v.w) < 1e-5f) return v;
     _v = _v * (1.0f / _v.w);
     float3 o = {_v.x, _v.y, _v.z};
@@ -571,6 +578,10 @@ static inline float3 quat_to_euler(quat q) {
 static inline float quat_angle(quat p, quat q) {
     return 2 * atan2(float4_length(p - q), float4_length(p + q));
 }
+
+quat quat_angle_axis(float angle, float3 axis);
+float3 quat_mul_point(quat q, float3 point);
+quat quat_mul_quat(quat a, quat b);
 
 static inline float _recip(float x) { return 1.0f / x; }
 

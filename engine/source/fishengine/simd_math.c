@@ -224,6 +224,52 @@ quat euler_to_quat(float3 e) {
     return q;
 }
 
+quat quat_angle_axis(float angle, float3 axis) {
+    float length = float3_length(axis);
+    if (length <= 1e-6) {
+        return quat_identity;
+    }
+    quat result;
+    float angleHalf = deg2rad(angle) * 0.5f;
+    float s = sin(angleHalf) / length;
+    result.w = cos(angleHalf);
+    result.x = axis.x * s;
+    result.y = axis.y * s;
+    result.z = axis.z * s;
+    return result;
+}
+
+float3 quat_mul_point(quat q, float3 point) {
+    float num = q.x * 2.f;
+    float num2 = q.y * 2.f;
+    float num3 = q.z * 2.f;
+    float num4 = q.x * num;
+    float num5 = q.y * num2;
+    float num6 = q.z * num3;
+    float num7 = q.x * num2;
+    float num8 = q.x * num3;
+    float num9 = q.y * num3;
+    float num10 = q.w * num;
+    float num11 = q.w * num2;
+    float num12 = q.w * num3;
+    float3 result;
+    result.x = (1.f - (num5 + num6)) * point.x + (num7 - num12) * point.y +
+               (num8 + num11) * point.z;
+    result.y = (num7 + num12) * point.x + (1.f - (num4 + num6)) * point.y +
+               (num9 - num10) * point.z;
+    result.z = (num8 - num11) * point.x + (num9 + num10) * point.y +
+               (1.f - (num4 + num5)) * point.z;
+    return result;
+}
+
+quat quat_mul_quat(quat lhs, quat rhs) {
+    quat q = {lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
+              lhs.w * rhs.y + lhs.y * rhs.w + lhs.z * rhs.x - lhs.x * rhs.z,
+              lhs.w * rhs.z + lhs.z * rhs.w + lhs.x * rhs.y - lhs.y * rhs.x,
+              lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z};
+    return q;
+}
+
 float4x4 float4x4_ortho_rh(float left, float right, float bottom, float top,
                            float nearZ, float farZ) {
     float4x4 m = float4x4_diagonal(2 / (right - left), 2 / (top - bottom),

@@ -42,6 +42,7 @@ struct Skin {
     Entity root;
     array inverseBindMatrices;
     array joints;
+    uint32_t minJoint;
 
     array boneMats;  // vector<float4x4>;
 };

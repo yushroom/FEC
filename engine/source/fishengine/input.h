@@ -38,10 +38,10 @@ typedef struct KeyEvent {
 
 
 typedef struct SingletonInput {
+    // bottom-left is at (0, 0)
+    // top-right if at (1, 1)
     float mousePositionX;
     float mousePositionY;
-    float mousePositionRawX;
-    float mousePositionRawY;
 
     KeyAction keyStates[_KeyCodeCount];
     float keyHeldTime[_KeyCodeCount];
@@ -68,6 +68,7 @@ static inline bool GetButtonHeldTime(SingletonInput *si, KeyCode code) {
 
 void SingletonInputUpdateAxis(SingletonInput *si, Axis axis, float value);
 void SingletonInputPostKeyEvent(SingletonInput *si, KeyEvent e);
+void SingletonInputSetMousePosition(SingletonInput *si, float x, float y);
 
 struct World;
 void InputSystemPostUpdate(struct World *w);

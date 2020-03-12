@@ -28,14 +28,7 @@ static JSValue js_fe_Transform_parent_getter(JSContext *ctx,
         (Transform *)JS_GetOpaque2(ctx, this_val, js_fe_Transform_class_id);
     if (!self) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
-    uint32_t p = TransformGetParent(tm, index);
-    if (p == 0) return JS_NULL;
-    value = (Transform *)array_at(&a->m, p);
+    value = TransformGetParent(defaultWorld, self);
 
     ret = JSValueFrom<Transform *>(ctx, value);
     return ret;
@@ -50,14 +43,7 @@ static JSValue js_fe_Transform_parent_setter(JSContext *ctx,
     Transform *value;
     if (JSValueTo<Transform *>(ctx, &value, val)) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
-    uint32_t parent = array_get_index(&a->m, value);
-    const uint32_t child = index;
-    TransformSetParent(tm, child, parent);
+    TransformSetParent(defaultWorld, self, value);
 
     return JS_UNDEFINED;
 }
@@ -83,13 +69,8 @@ static JSValue js_fe_Transform_localPosition_setter(JSContext *ctx,
     float3 value;
     if (JSValueTo<float3>(ctx, &value, val)) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
     self->localPosition = value;
-    TransformSetDirty(tm, index);
+    TransformSetDirty(defaultWorld, self);
 
     return JS_UNDEFINED;
 }
@@ -115,13 +96,8 @@ static JSValue js_fe_Transform_localRotation_setter(JSContext *ctx,
     quat value;
     if (JSValueTo<quat>(ctx, &value, val)) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
     self->localRotation = value;
-    TransformSetDirty(tm, index);
+    TransformSetDirty(defaultWorld, self);
 
     return JS_UNDEFINED;
 }
@@ -149,13 +125,8 @@ static JSValue js_fe_Transform_localEulerAngles_setter(JSContext *ctx,
     float3 value;
     if (JSValueTo<float3>(ctx, &value, val)) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
     self->localRotation = euler_to_quat(value);
-    TransformSetDirty(tm, index);
+    TransformSetDirty(defaultWorld, self);
 
     return JS_UNDEFINED;
 }
@@ -181,13 +152,8 @@ static JSValue js_fe_Transform_localScale_setter(JSContext *ctx,
     float3 value;
     if (JSValueTo<float3>(ctx, &value, val)) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
     self->localScale = value;
-    TransformSetDirty(tm, index);
+    TransformSetDirty(defaultWorld, self);
 
     return JS_UNDEFINED;
 }
@@ -200,12 +166,7 @@ static JSValue js_fe_Transform_position_getter(JSContext *ctx,
         (Transform *)JS_GetOpaque2(ctx, this_val, js_fe_Transform_class_id);
     if (!self) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
-    value = TransformGetPosition(tm, defaultWorld, index);
+    value = TransformGetPosition(defaultWorld, self);
 
     ret = JSValueFrom<float3>(ctx, value);
     return ret;
@@ -220,14 +181,9 @@ static JSValue js_fe_Transform_localMatrix_setter(JSContext *ctx,
     float4x4 value;
     if (JSValueTo<float4x4>(ctx, &value, val)) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
     float4x4_decompose(&value, &self->localPosition, &self->localRotation,
                        &self->localScale);
-    TransformSetDirty(tm, index);
+    TransformSetDirty(defaultWorld, self);
 
     return JS_UNDEFINED;
 }
@@ -244,14 +200,31 @@ static JSValue js_fe_Transform_LookAt(JSContext *ctx, JSValueConst this_value,
     float3 target;
     if (JSValueTo<float3>(ctx, &target, argv[0])) return JS_EXCEPTION;
 
-    SingletonTransformManager *tm =
-        (SingletonTransformManager *)WorldGetSingletonComponent(
-            defaultWorld, SingletonTransformManagerID);
-    ComponentArray *a = &defaultWorld->componentArrays[TransformID];
-    uint32_t index = array_get_index(&a->m, self);
-    TransformLookAt(tm, defaultWorld, index, target);
+    TransformLookAt(defaultWorld, self, target);
 
     JSValueFree<float3>(ctx, target);
+
+    return JS_UNDEFINED;
+}
+static JSValue js_fe_Transform_Translate(JSContext *ctx,
+                                         JSValueConst this_value, int argc,
+                                         JSValueConst *argv) {
+    Transform *self =
+        (Transform *)JS_GetOpaque2(ctx, this_value, js_fe_Transform_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 2) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    float3 translate;
+    if (JSValueTo<float3>(ctx, &translate, argv[0])) return JS_EXCEPTION;
+    enum Space space;
+    if (JSValueTo<enum Space>(ctx, &space, argv[1])) return JS_EXCEPTION;
+
+    TransformTranslate(defaultWorld, self, translate, space);
+
+    JSValueFree<float3>(ctx, translate);
+    JSValueFree<enum Space>(ctx, space);
 
     return JS_UNDEFINED;
 }
@@ -270,6 +243,7 @@ static const JSCFunctionListEntry js_fe_Transform_proto_funcs[] = {
     JS_CGETSET_DEF("position", js_fe_Transform_position_getter, NULL),
     JS_CGETSET_DEF("localMatrix", NULL, js_fe_Transform_localMatrix_setter),
     JS_CFUNC_DEF("LookAt", 1, js_fe_Transform_LookAt),
+    JS_CFUNC_DEF("Translate", 2, js_fe_Transform_Translate),
 };
 
 extern "C" {
@@ -357,6 +331,19 @@ static JSValue js_fe_Camera_farClipPlane_setter(JSContext *ctx,
     if (JSValueTo<float>(ctx, &value, val)) return JS_EXCEPTION;
     self->farClipPlane = value;
     return JS_UNDEFINED;
+}
+
+static JSValue js_fe_Camera_GetMainCamera(JSContext *ctx,
+                                          JSValueConst this_value, int argc,
+                                          JSValueConst *argv) {
+    if (argc != 0) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    Camera *ret;
+
+    ret = CameraGetMainCamera(defaultWorld);
+
+    return JSValueFrom<Camera *>(ctx, ret);
 }
 
 static const JSCFunctionListEntry js_fe_Camera_proto_funcs[] = {
@@ -701,6 +688,27 @@ static JSValue js_fe_Skin_root_setter(JSContext *ctx, JSValueConst this_val,
     self->root = value;
     return JS_UNDEFINED;
 }
+// uint32_t minJoint getter
+static JSValue js_fe_Skin_minJoint_getter(JSContext *ctx,
+                                          JSValueConst this_val) {
+    JSValue ret;
+    uint32_t value;
+    Skin *self = (Skin *)JS_GetOpaque2(ctx, this_val, js_fe_Skin_class_id);
+    if (!self) return JS_EXCEPTION;
+    value = self->minJoint;
+    ret = JSValueFrom<uint32_t>(ctx, value);
+    return ret;
+}
+// uint32_t minJoint setter
+static JSValue js_fe_Skin_minJoint_setter(JSContext *ctx, JSValueConst this_val,
+                                          JSValue val) {
+    Skin *self = (Skin *)JS_GetOpaque2(ctx, this_val, js_fe_Skin_class_id);
+    if (!self) return JS_EXCEPTION;
+    uint32_t value;
+    if (JSValueTo<uint32_t>(ctx, &value, val)) return JS_EXCEPTION;
+    self->minJoint = value;
+    return JS_UNDEFINED;
+}
 // TypedArray inverseBindMatrices setter
 static JSValue js_fe_Skin_inverseBindMatrices_setter(JSContext *ctx,
                                                      JSValueConst this_val,
@@ -744,6 +752,8 @@ static JSValue js_fe_Skin_joints_setter(JSContext *ctx, JSValueConst this_val,
 
 static const JSCFunctionListEntry js_fe_Skin_proto_funcs[] = {
     JS_CGETSET_DEF("root", js_fe_Skin_root_getter, js_fe_Skin_root_setter),
+    JS_CGETSET_DEF("minJoint", js_fe_Skin_minJoint_getter,
+                   js_fe_Skin_minJoint_setter),
     JS_CGETSET_DEF("inverseBindMatrices", NULL,
                    js_fe_Skin_inverseBindMatrices_setter),
     JS_CGETSET_DEF("joints", NULL, js_fe_Skin_joints_setter),
@@ -777,8 +787,6 @@ static JSValue js_fe_Mesh_ctor(JSContext *ctx, JSValueConst new_target,
         return obj;
     }
 
-    // AssetID aid;
-    // self = (Mesh *)AssetNew(AssetTypeMesh, &aid);
     self = (Mesh *)MeshNew();
     self->refcount = 1;
 
@@ -1180,6 +1188,30 @@ static JSValue js_fe_Renderable_skin_setter(JSContext *ctx,
     return JS_UNDEFINED;
 }
 
+static JSValue js_fe_Renderable_MapBoneToEntity(JSContext *ctx,
+                                                JSValueConst this_value,
+                                                int argc, JSValueConst *argv) {
+    Renderable *self =
+        (Renderable *)JS_GetOpaque2(ctx, this_value, js_fe_Renderable_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 2) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    uint32_t bone;
+    if (JSValueTo<uint32_t>(ctx, &bone, argv[0])) return JS_EXCEPTION;
+    uint32_t entity;
+    if (JSValueTo<uint32_t>(ctx, &entity, argv[1])) return JS_EXCEPTION;
+
+    assert(bone < 128);
+    self->boneToEntity[bone] = entity;
+
+    JSValueFree<uint32_t>(ctx, bone);
+    JSValueFree<uint32_t>(ctx, entity);
+
+    return JS_UNDEFINED;
+}
+
 static const JSCFunctionListEntry js_fe_Renderable_proto_funcs[] = {
     JS_CGETSET_DEF("mesh", js_fe_Renderable_mesh_getter,
                    js_fe_Renderable_mesh_setter),
@@ -1187,6 +1219,7 @@ static const JSCFunctionListEntry js_fe_Renderable_proto_funcs[] = {
                    js_fe_Renderable_material_setter),
     JS_CGETSET_DEF("skin", js_fe_Renderable_skin_getter,
                    js_fe_Renderable_skin_setter),
+    JS_CFUNC_DEF("MapBoneToEntity", 2, js_fe_Renderable_MapBoneToEntity),
 };
 
 extern "C" {
@@ -1376,10 +1409,54 @@ static JSValue js_fe_Animation_AddClip(JSContext *ctx, JSValueConst this_value,
 
     return JS_UNDEFINED;
 }
+static JSValue js_fe_Animation_SetEntityOffset(JSContext *ctx,
+                                               JSValueConst this_value,
+                                               int argc, JSValueConst *argv) {
+    Animation *self =
+        (Animation *)JS_GetOpaque2(ctx, this_value, js_fe_Animation_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 1) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    int entityOffset;
+    if (JSValueTo<int>(ctx, &entityOffset, argv[0])) return JS_EXCEPTION;
+
+    self->entityOffset = entityOffset;
+
+    JSValueFree<int>(ctx, entityOffset);
+
+    return JS_UNDEFINED;
+}
+static JSValue js_fe_Animation_SetEntityRemap(JSContext *ctx,
+                                              JSValueConst this_value, int argc,
+                                              JSValueConst *argv) {
+    Animation *self =
+        (Animation *)JS_GetOpaque2(ctx, this_value, js_fe_Animation_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 2) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    uint32_t e1;
+    if (JSValueTo<uint32_t>(ctx, &e1, argv[0])) return JS_EXCEPTION;
+    int e2;
+    if (JSValueTo<int>(ctx, &e2, argv[1])) return JS_EXCEPTION;
+
+    assert(e1 < 512);
+    self->entityRemap[e1] = e2;
+
+    JSValueFree<uint32_t>(ctx, e1);
+    JSValueFree<int>(ctx, e2);
+
+    return JS_UNDEFINED;
+}
 
 static const JSCFunctionListEntry js_fe_Animation_proto_funcs[] = {
     JS_CFUNC_DEF("Play", 1, js_fe_Animation_Play),
     JS_CFUNC_DEF("AddClip", 1, js_fe_Animation_AddClip),
+    JS_CFUNC_DEF("SetEntityOffset", 1, js_fe_Animation_SetEntityOffset),
+    JS_CFUNC_DEF("SetEntityRemap", 2, js_fe_Animation_SetEntityRemap),
 };
 
 extern "C" {
@@ -1422,23 +1499,147 @@ static const JSCFunctionListEntry js_fe_Light_proto_funcs[] = {
 };
 
 extern "C" {
-int js_init_module_fishengine_extra(JSContext *ctx, JSModuleDef *m);
-int js_fe_init_extra(JSContext *ctx, JSModuleDef *m);
-JSClassID js_def_class(JSContext *ctx, JSClassDef *class_def,
-                       const JSCFunctionListEntry proto_funcs[],
-                       int proto_func_count);
+JSClassID js_fe_SingletonInput_class_id = 0;
 }
 
-#define CreateClass(name)                                                    \
-    js_fe_##name##_class_id =                                                \
-        js_def_class(ctx, &js_fe_##name##_class, js_fe_##name##_proto_funcs, \
-                     countof(js_fe_##name##_proto_funcs))
+template <>
+inline JSClassID JSGetClassID<SingletonInput>() {
+    return js_fe_SingletonInput_class_id;
+}
+
+static JSClassDef js_fe_SingletonInput_class = {
+    "SingletonInput",
+    .finalizer = NULL,
+};
+
+static JSValue js_fe_SingletonInput_GetKeyDown(JSContext *ctx,
+                                               JSValueConst this_value,
+                                               int argc, JSValueConst *argv) {
+    SingletonInput *self = (SingletonInput *)JS_GetOpaque2(
+        ctx, this_value, js_fe_SingletonInput_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 1) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    enum KeyCode code;
+    if (JSValueTo<enum KeyCode>(ctx, &code, argv[0])) return JS_EXCEPTION;
+    bool ret;
+
+    ret = IsButtonPressed(self, code);
+
+    JSValueFree<enum KeyCode>(ctx, code);
+
+    return JSValueFrom<bool>(ctx, ret);
+}
+static JSValue js_fe_SingletonInput_GetKeyUp(JSContext *ctx,
+                                             JSValueConst this_value, int argc,
+                                             JSValueConst *argv) {
+    SingletonInput *self = (SingletonInput *)JS_GetOpaque2(
+        ctx, this_value, js_fe_SingletonInput_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 1) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    enum KeyCode code;
+    if (JSValueTo<enum KeyCode>(ctx, &code, argv[0])) return JS_EXCEPTION;
+    bool ret;
+
+    ret = IsButtonReleased(self, code);
+
+    JSValueFree<enum KeyCode>(ctx, code);
+
+    return JSValueFrom<bool>(ctx, ret);
+}
+static JSValue js_fe_SingletonInput_GetKey(JSContext *ctx,
+                                           JSValueConst this_value, int argc,
+                                           JSValueConst *argv) {
+    SingletonInput *self = (SingletonInput *)JS_GetOpaque2(
+        ctx, this_value, js_fe_SingletonInput_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 1) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    enum KeyCode code;
+    if (JSValueTo<enum KeyCode>(ctx, &code, argv[0])) return JS_EXCEPTION;
+    bool ret;
+
+    ret = IsButtonHeld(self, code);
+
+    JSValueFree<enum KeyCode>(ctx, code);
+
+    return JSValueFrom<bool>(ctx, ret);
+}
+static JSValue js_fe_SingletonInput_GetAxis(JSContext *ctx,
+                                            JSValueConst this_value, int argc,
+                                            JSValueConst *argv) {
+    SingletonInput *self = (SingletonInput *)JS_GetOpaque2(
+        ctx, this_value, js_fe_SingletonInput_class_id);
+    if (!self) return JS_EXCEPTION;
+
+    if (argc != 1) return JS_EXCEPTION;
+
+    // TODO: goto fail and clear values if exception
+    enum Axis axis;
+    if (JSValueTo<enum Axis>(ctx, &axis, argv[0])) return JS_EXCEPTION;
+    float ret;
+
+    ret = self->axis[axis];
+
+    JSValueFree<enum Axis>(ctx, axis);
+
+    return JSValueFrom<float>(ctx, ret);
+}
+
+static const JSCFunctionListEntry js_fe_SingletonInput_proto_funcs[] = {
+    JS_CFUNC_DEF("GetKeyDown", 1, js_fe_SingletonInput_GetKeyDown),
+    JS_CFUNC_DEF("GetKeyUp", 1, js_fe_SingletonInput_GetKeyUp),
+    JS_CFUNC_DEF("GetKey", 1, js_fe_SingletonInput_GetKey),
+    JS_CFUNC_DEF("GetAxis", 1, js_fe_SingletonInput_GetAxis),
+};
+
+extern "C" {
+int js_init_module_fishengine_extra(JSContext *ctx, JSModuleDef *m);
+int js_fe_init_extra(JSContext *ctx, JSModuleDef *m);
+}
 
 int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
-    CreateClass(Transform);
-    CreateClass(Camera);
     {
-        JSValue proto, _class;
+        JSValue proto;
+        JSClassID class_id = 0;
+        JS_NewClassID(&class_id);
+        js_fe_Transform_class_id = class_id;
+        JS_NewClass(JS_GetRuntime(ctx), class_id, &js_fe_Transform_class);
+        proto = JS_NewObject(ctx);
+        JS_SetPropertyFunctionList(ctx, proto, js_fe_Transform_proto_funcs,
+                                   countof(js_fe_Transform_proto_funcs));
+        JS_SetClassProto(ctx, class_id, proto);
+    }
+
+    {
+        JSValue proto;
+        JSClassID class_id = 0;
+        JS_NewClassID(&class_id);
+        js_fe_Camera_class_id = class_id;
+        JS_NewClass(JS_GetRuntime(ctx), class_id, &js_fe_Camera_class);
+        proto = JS_NewObject(ctx);
+        JS_SetPropertyFunctionList(ctx, proto, js_fe_Camera_proto_funcs,
+                                   countof(js_fe_Camera_proto_funcs));
+        JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
+        const char *class_name = "Camera";
+        _class =
+            JS_NewCFunction2(ctx, NULL, class_name, 0, JS_CFUNC_constructor, 0);
+        JS_SetPropertyStr(ctx, _class, "GetMainCamera",
+                          JS_NewCFunction(ctx, js_fe_Camera_GetMainCamera,
+                                          "GetMainCamera", 0));
+        JS_SetModuleExport(ctx, m, class_name, _class);
+    }
+
+    {
+        JSValue proto;
         JSClassID class_id = 0;
         JS_NewClassID(&class_id);
         js_fe_Texture_class_id = class_id;
@@ -1447,6 +1648,7 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
         JS_SetPropertyFunctionList(ctx, proto, js_fe_Texture_proto_funcs,
                                    countof(js_fe_Texture_proto_funcs));
         JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
         const char *class_name = "Texture";
         _class = JS_NewCFunction2(ctx, js_fe_Texture_ctor, class_name, 0,
                                   JS_CFUNC_constructor, 0);
@@ -1456,8 +1658,9 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
             JS_NewCFunction(ctx, js_fe_Texture_FromDDSFile, "FromDDSFile", 1));
         JS_SetModuleExport(ctx, m, class_name, _class);
     }
+
     {
-        JSValue proto, _class;
+        JSValue proto;
         JSClassID class_id = 0;
         JS_NewClassID(&class_id);
         js_fe_Shader_class_id = class_id;
@@ -1466,6 +1669,7 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
         JS_SetPropertyFunctionList(ctx, proto, js_fe_Shader_proto_funcs,
                                    countof(js_fe_Shader_proto_funcs));
         JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
         const char *class_name = "Shader";
         _class = JS_NewCFunction2(ctx, js_fe_Shader_ctor, class_name, 0,
                                   JS_CFUNC_constructor, 0);
@@ -1478,8 +1682,9 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
             JS_NewCFunction(ctx, js_fe_Shader_PropertyToID, "PropertyToID", 1));
         JS_SetModuleExport(ctx, m, class_name, _class);
     }
+
     {
-        JSValue proto, _class;
+        JSValue proto;
         JSClassID class_id = 0;
         JS_NewClassID(&class_id);
         js_fe_Skin_class_id = class_id;
@@ -1488,14 +1693,16 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
         JS_SetPropertyFunctionList(ctx, proto, js_fe_Skin_proto_funcs,
                                    countof(js_fe_Skin_proto_funcs));
         JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
         const char *class_name = "Skin";
         _class = JS_NewCFunction2(ctx, js_fe_Skin_ctor, class_name, 0,
                                   JS_CFUNC_constructor, 0);
         JS_SetConstructor(ctx, _class, proto);
         JS_SetModuleExport(ctx, m, class_name, _class);
     }
+
     {
-        JSValue proto, _class;
+        JSValue proto;
         JSClassID class_id = 0;
         JS_NewClassID(&class_id);
         js_fe_Mesh_class_id = class_id;
@@ -1504,6 +1711,7 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
         JS_SetPropertyFunctionList(ctx, proto, js_fe_Mesh_proto_funcs,
                                    countof(js_fe_Mesh_proto_funcs));
         JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
         const char *class_name = "Mesh";
         _class = JS_NewCFunction2(ctx, js_fe_Mesh_ctor, class_name, 0,
                                   JS_CFUNC_constructor, 0);
@@ -1513,8 +1721,9 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
             JS_NewCFunction(ctx, js_fe_Mesh_CombineMeshes, "CombineMeshes", 1));
         JS_SetModuleExport(ctx, m, class_name, _class);
     }
+
     {
-        JSValue proto, _class;
+        JSValue proto;
         JSClassID class_id = 0;
         JS_NewClassID(&class_id);
         js_fe_Material_class_id = class_id;
@@ -1523,15 +1732,28 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
         JS_SetPropertyFunctionList(ctx, proto, js_fe_Material_proto_funcs,
                                    countof(js_fe_Material_proto_funcs));
         JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
         const char *class_name = "Material";
         _class = JS_NewCFunction2(ctx, js_fe_Material_ctor, class_name, 0,
                                   JS_CFUNC_constructor, 0);
         JS_SetConstructor(ctx, _class, proto);
         JS_SetModuleExport(ctx, m, class_name, _class);
     }
-    CreateClass(Renderable);
+
     {
-        JSValue proto, _class;
+        JSValue proto;
+        JSClassID class_id = 0;
+        JS_NewClassID(&class_id);
+        js_fe_Renderable_class_id = class_id;
+        JS_NewClass(JS_GetRuntime(ctx), class_id, &js_fe_Renderable_class);
+        proto = JS_NewObject(ctx);
+        JS_SetPropertyFunctionList(ctx, proto, js_fe_Renderable_proto_funcs,
+                                   countof(js_fe_Renderable_proto_funcs));
+        JS_SetClassProto(ctx, class_id, proto);
+    }
+
+    {
+        JSValue proto;
         JSClassID class_id = 0;
         JS_NewClassID(&class_id);
         js_fe_AnimationClip_class_id = class_id;
@@ -1540,14 +1762,49 @@ int js_fe_init_extra(JSContext *ctx, JSModuleDef *m) {
         JS_SetPropertyFunctionList(ctx, proto, js_fe_AnimationClip_proto_funcs,
                                    countof(js_fe_AnimationClip_proto_funcs));
         JS_SetClassProto(ctx, class_id, proto);
+        JSValue _class;
         const char *class_name = "AnimationClip";
         _class = JS_NewCFunction2(ctx, js_fe_AnimationClip_ctor, class_name, 0,
                                   JS_CFUNC_constructor, 0);
         JS_SetConstructor(ctx, _class, proto);
         JS_SetModuleExport(ctx, m, class_name, _class);
     }
-    CreateClass(Animation);
-    CreateClass(Light);
+
+    {
+        JSValue proto;
+        JSClassID class_id = 0;
+        JS_NewClassID(&class_id);
+        js_fe_Animation_class_id = class_id;
+        JS_NewClass(JS_GetRuntime(ctx), class_id, &js_fe_Animation_class);
+        proto = JS_NewObject(ctx);
+        JS_SetPropertyFunctionList(ctx, proto, js_fe_Animation_proto_funcs,
+                                   countof(js_fe_Animation_proto_funcs));
+        JS_SetClassProto(ctx, class_id, proto);
+    }
+
+    {
+        JSValue proto;
+        JSClassID class_id = 0;
+        JS_NewClassID(&class_id);
+        js_fe_Light_class_id = class_id;
+        JS_NewClass(JS_GetRuntime(ctx), class_id, &js_fe_Light_class);
+        proto = JS_NewObject(ctx);
+        JS_SetPropertyFunctionList(ctx, proto, js_fe_Light_proto_funcs,
+                                   countof(js_fe_Light_proto_funcs));
+        JS_SetClassProto(ctx, class_id, proto);
+    }
+
+    {
+        JSValue proto;
+        JSClassID class_id = 0;
+        JS_NewClassID(&class_id);
+        js_fe_SingletonInput_class_id = class_id;
+        JS_NewClass(JS_GetRuntime(ctx), class_id, &js_fe_SingletonInput_class);
+        proto = JS_NewObject(ctx);
+        JS_SetPropertyFunctionList(ctx, proto, js_fe_SingletonInput_proto_funcs,
+                                   countof(js_fe_SingletonInput_proto_funcs));
+        JS_SetClassProto(ctx, class_id, proto);
+    }
     return 0;
 }
 
@@ -1563,5 +1820,6 @@ int js_init_module_fishengine_extra(JSContext *ctx, JSModuleDef *m) {
     JS_AddModuleExport(ctx, m, "AnimationClip");
     JS_AddModuleExport(ctx, m, "Animation");
     JS_AddModuleExport(ctx, m, "Light");
+    JS_AddModuleExport(ctx, m, "SingletonInput");
     return 0;
 }

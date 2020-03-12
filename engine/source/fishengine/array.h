@@ -28,7 +28,8 @@ void array_resize(array *a, uint32_t new_size);
 void array_free(array *a);
 
 static inline void *array_at(array *a, uint32_t idx) {
-    assert(idx >= 0 && idx < a->size);
+    assert(idx < a->size);
+    if (idx >= a->size) return NULL;
     char *p = (char *)a->ptr + idx * a->stride;  // make c++ compiler happy
     return (void *)p;
 }

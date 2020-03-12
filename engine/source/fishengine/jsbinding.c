@@ -14,6 +14,8 @@
 #include "rhi.h"
 #include "texture.h"
 #include "transform.h"
+#include "free_camera.h"
+#include "input.h"
 
 World *defaultWorld = NULL;
 
@@ -26,6 +28,7 @@ extern JSClassID js_fe_Light_class_id;
 extern JSClassID js_fe_Camera_class_id;
 extern JSClassID js_fe_Renderable_class_id;
 extern JSClassID js_fe_Mesh_class_id;
+extern JSClassID js_fe_SingletonInput_class_id;
 
 JSClassID js_fe_world_class_id = 0;
 static JSClassDef js_fe_world_class = {
@@ -133,6 +136,21 @@ PFUNC(World, AddSystem) {
     return JS_UNDEFINED;
 }
 
+PFUNC(World, GetSingletonComponent) {
+    if (argc != 1) return JS_EXCEPTION;
+    World *w = JS_GetOpaque2(ctx, this_value, js_fe_world_class_id);
+    if (!w) return JS_EXCEPTION;
+    uint32_t typeID = 0;
+    if (JS_ToUint32(ctx, &typeID, argv[0])) return JS_EXCEPTION;
+    void * scomp = WorldGetSingletonComponent(w, typeID);
+    if (scomp == NULL) {
+        return JS_NULL;
+    } else if (typeID == SingletonInputID) {
+        return js_wrap_class(ctx, scomp, js_fe_SingletonInput_class_id);
+    }
+    return JS_NULL;
+}
+
 PFUNC(World, Clear) {
     World *w = JS_GetOpaque2(ctx, this_value, js_fe_world_class_id);
     if (!w) return JS_EXCEPTION;
@@ -144,6 +162,7 @@ static const JSCFunctionListEntry js_fe_world_proto_funcs[] = {
     JS_CFUNC_DEF("CreateEntity", 0, js_fe_World_CreateEntity),
     JS_CFUNC_DEF("CreateEntities", 1, js_fe_World_CreateEntities),
     JS_CFUNC_DEF("AddSystem", 1, js_fe_World_AddSystem),
+    JS_CFUNC_DEF("GetSingletonComponent", 1, js_fe_World_GetSingletonComponent),
     JS_CFUNC_DEF("Clear", 1, js_fe_World_Clear),
 };
 
@@ -197,19 +216,14 @@ PFUNC(Entity, AddComponent) {
     if (JS_ToUint32(ctx, &type, argv[0])) return JS_EXCEPTION;
     void *comp = EntityAddComponent(e, defaultWorld, type);
     if (type == TransformID) {
-        TransformInit((Transform *)comp);
         return js_wrap_class(ctx, comp, js_fe_Transform_class_id);
     } else if (type == CameraID) {
-        CameraInit((Camera *)comp);
         return js_wrap_class(ctx, comp, js_fe_Camera_class_id);
     } else if (type == RenderableID) {
-        RenderableInit((Renderable *)comp);
         return js_wrap_class(ctx, comp, js_fe_Renderable_class_id);
     } else if (type == AnimationID) {
-        AnimationInit((Animation *)comp);
         return js_wrap_class(ctx, comp, js_fe_Animation_class_id);
     } else if (type == LightID) {
-        LightInit((Light *)comp);
         return js_wrap_class(ctx, comp, js_fe_Light_class_id);
     }
     return JS_UNDEFINED;
@@ -283,6 +297,9 @@ static const JSCFunctionListEntry js_fe_funcs[] = {
     FE_COMP(Camera),
     FE_COMP(Animation),
     FE_COMP(Light),
+    FE_COMP(FreeCamera),
+    FE_FLAG(SingletonInputID),
+    FE_FLAG(SingletonSelectionID),
     FE_FLAG(VertexAttrPosition),
     FE_FLAG(VertexAttrNormal),
     FE_FLAG(VertexAttrTangent),
@@ -297,6 +314,19 @@ static const JSCFunctionListEntry js_fe_funcs[] = {
     FE_FLAG(TextureWrapModeClamp),
     FE_FLAG(TextureWrapModeMirror),
     FE_FLAG(TextureWrapModeMirrorOnce),
+    FE_FLAG(KeyCodeLeftAlt),
+    FE_FLAG(KeyCodeRightAlt),
+    FE_FLAG(KeyCodeLeftControl),
+    FE_FLAG(KeyCodeRightControl),
+    FE_FLAG(KeyCodeLeftCommand),
+    FE_FLAG(KeyCodeRightCommand),
+    FE_FLAG(KeyCodeMouse0),
+    FE_FLAG(KeyCodeMouse1),
+    FE_FLAG(KeyCodeMouse2),
+    FE_FLAG(AxisMouseScrollWheel),
+    FE_FLAG(AxisMouseX),
+    FE_FLAG(AxisMouseY),
+    FE_FLAG(KeyCodeF),
 };
 
 int js_init_module_fishengine_extra(JSContext *ctx, JSModuleDef *m);

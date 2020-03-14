@@ -27,4 +27,8 @@ void WaitForLastSubmittedFrame();
 FrameContext* WaitForNextFrameResources();
 void ResizeSwapChain(HWND hWnd, int width, int height);
 
+
+#include "texture.h"
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUHandle(Texture *texture);
+
 #endif  // !RENDER_D3D12_HPP

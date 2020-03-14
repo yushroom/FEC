@@ -27,6 +27,8 @@ add_library(FishEngine
     
     animation.h animation.c
     ddsloader.h ddsloader.c
+
+    imgui_extra.hpp imgui_extra.cpp
 )
 target_compile_features(FishEngine PUBLIC cxx_std_17)
 target_compile_features(FishEngine PUBLIC c_std_11)

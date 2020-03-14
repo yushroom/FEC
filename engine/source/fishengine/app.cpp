@@ -16,11 +16,12 @@
 #include "shader_internal.hpp"
 #include "material_internal.hpp"
 #include "singleton_selection.h"
+#include "imgui_extra.hpp"
 
 extern "C" {
 void HierarchyWindow(World *w);
 void InspectorWindow(World *w);
-void AssetWindow();
+void AssetWindow(World *w);
 void StatisticsWindow(World *w, JSRuntime *rt);
 void ConsoleWindow();
 void open_file_by_callstack(const uint8_t *callstack);
@@ -63,8 +64,13 @@ void hierarchy_impl(uint32_t id) {
     if (clicked) selectedEntity = id;
 }
 
-constexpr float width = 200;
-constexpr float toolbarHeight = 40;
+struct FEImGuiStyle {
+    float toolbarHeight = 40;
+    float hierarchyWidth = 200;
+    float inspectorWidth = 200;
+    float assetHeight = 200;
+};
+struct FEImGuiStyle g_style;
 
 void HierarchyWindow(World *w) {
     world = w;
@@ -73,9 +79,9 @@ void HierarchyWindow(World *w) {
                                                          SingletonSelectionID);
     selectedEntity = selection->selectedEntity;
     auto size = ImGui::GetIO().DisplaySize;
-    float height = (size.y - toolbarHeight) / 2;
-    ImGui::SetNextWindowSize(ImVec2(width, height));
-    ImGui::SetNextWindowPos(ImVec2(size.x - width, toolbarHeight));
+    float height = size.y - g_style.toolbarHeight - g_style.assetHeight;
+    ImGui::SetNextWindowSize(ImVec2(g_style.hierarchyWidth, height));
+    ImGui::SetNextWindowPos(ImVec2(0, g_style.toolbarHeight));
     ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 8);
     ImGui::Begin("Hierarchy");
     for (int i = 1; i < w->componentArrays[TransformID].m.size; ++i) {
@@ -86,96 +92,9 @@ void HierarchyWindow(World *w) {
     selection->selectedEntity = selectedEntity;
 }
 
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include <imgui_internal.h>
-
-namespace ImGui {
-// Render a rectangle shaped with optional rounding and borders
-void RenderFrame2(ImVec2 p_min, ImVec2 p_max, ImU32 fill_col, bool border,
-                  float rounding, ImDrawCornerFlags corner_flags) {
-    ImGuiContext &g = *GImGui;
-    ImGuiWindow *window = g.CurrentWindow;
-    window->DrawList->AddRectFilled(p_min, p_max, fill_col, rounding,
-                                    corner_flags);
-    //		const float border_size = g.Style.FrameBorderSize;
-    const float border_size = 1.0f;
-    if (border && border_size > 0.0f) {
-        window->DrawList->AddRect(p_min + ImVec2(1, 1), p_max + ImVec2(1, 1),
-                                  GetColorU32(ImGuiCol_BorderShadow), rounding,
-                                  corner_flags, border_size);
-        window->DrawList->AddRect(p_min, p_max, GetColorU32(ImGuiCol_Border),
-                                  rounding, corner_flags, border_size);
-    }
-}
-
-bool ButtonEx2(const char *label, const ImVec2 &size_arg,
-               ImGuiButtonFlags flags, ImDrawCornerFlags corner_flags,
-               bool active) {
-    ImGuiWindow *window = GetCurrentWindow();
-    if (window->SkipItems) return false;
-
-    ImGuiContext &g = *GImGui;
-    const ImGuiStyle &style = g.Style;
-    const ImGuiID id = window->GetID(label);
-    const ImVec2 label_size = CalcTextSize(label, NULL, true);
-
-    ImVec2 pos = window->DC.CursorPos;
-    if ((flags & ImGuiButtonFlags_AlignTextBaseLine) &&
-        style.FramePadding.y <
-            window->DC.CurrLineTextBaseOffset)  // Try to vertically align
-                                                // buttons that are smaller/have
-                                                // no padding so that text
-                                                // baseline matches (bit hacky,
-                                                // since it shouldn't be a flag)
-        pos.y += window->DC.CurrLineTextBaseOffset - style.FramePadding.y;
-    ImVec2 size =
-        CalcItemSize(size_arg, label_size.x + style.FramePadding.x * 2.0f,
-                     label_size.y + style.FramePadding.y * 2.0f);
-
-    const ImRect bb(pos, pos + size);
-    ItemSize(size, style.FramePadding.y);
-    if (!ItemAdd(bb, id)) return false;
-
-    if (window->DC.ItemFlags & ImGuiItemFlags_ButtonRepeat)
-        flags |= ImGuiButtonFlags_Repeat;
-    bool hovered, held;
-    bool pressed = ButtonBehavior(bb, id, &hovered, &held, flags);
-
-    // Render
-    const ImU32 col =
-        GetColorU32((active || (held && hovered))
-                        ? ImGuiCol_ButtonActive
-                        : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
-    RenderNavHighlight(bb, id);
-    RenderFrame2(bb.Min, bb.Max, col, true, 4.0f, corner_flags);
-    RenderTextClipped(bb.Min + style.FramePadding, bb.Max - style.FramePadding,
-                      label, NULL, &label_size, style.ButtonTextAlign, &bb);
-
-    // Automatically close popups
-    // if (pressed && !(flags & ImGuiButtonFlags_DontClosePopups) &&
-    // (window->Flags & ImGuiWindowFlags_Popup))
-    //    CloseCurrentPopup();
-
-    IMGUI_TEST_ENGINE_ITEM_INFO(id, label, window->DC.LastItemStatusFlags);
-    return pressed;
-}
-
-bool Button2(const char *label, const ImVec2 &size_arg,
-             ImDrawCornerFlags corner_flags, bool active = false) {
-    return ButtonEx2(label, size_arg, 0, corner_flags, active);
-}
-}  // namespace ImGui
-
-struct FEImGuiStyle {
-    float toolBarHeight;
-    float inspectorWidth;
-};
-
-struct FEImGuiStyle g_style;
-
 void Toolbar(World *world) {
     auto size = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowSize(ImVec2(size.x, toolbarHeight));
+    ImGui::SetNextWindowSize(ImVec2(size.x, g_style.toolbarHeight));
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     const ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoNav |
@@ -186,16 +105,13 @@ void Toolbar(World *world) {
     {
         float sw = 48;
         float sh = 24;
-        //		ImGui::SetCursorPosX(posx);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(-1, 2));
-        ImGui::Button2("hand", ImVec2(sw, sh), ImDrawCornerFlags_Left);
-        ImGui::SameLine(0);
-        ImGui::Button2("move", ImVec2(sw, sh), ImDrawCornerFlags_None);
-        ImGui::SameLine(0);
-        ImGui::Button2("rotate", ImVec2(sw, sh), ImDrawCornerFlags_None);
-        ImGui::SameLine(0);
-        ImGui::Button2("scale", ImVec2(sw, sh), ImDrawCornerFlags_Right);
-        ImGui::PopStyleVar();
+        ImGui::BeginSegmentedButtons(4);
+        ImVec2 sz(sw, sh);
+        ImGui::SegmentedButton("hand", sz);
+        ImGui::SegmentedButton("move", sz);
+        ImGui::SegmentedButton("rotate", sz);
+        ImGui::SegmentedButton("scale", sz);
+        ImGui::EndSegmentedButtons();
     }
     {
         float sw = 48;
@@ -204,22 +120,19 @@ void Toolbar(World *world) {
         float posy = (ImGui::GetWindowHeight() - sh) / 2;
         ImGui::SetCursorPosX(posx);
         ImGui::SetCursorPosY(posy);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(-1, 2));
-        if (ImGui::Button2("play", ImVec2(sw, sh), ImDrawCornerFlags_Left,
-                           app_is_playing())) {
+        ImGui::BeginSegmentedButtons(3);
+        ImVec2 sz(sw, sh);
+        if (ImGui::SegmentedButton("play", sz, app_is_playing())) {
             if (app_is_playing())
                 app_stop();
             else
                 app_play();
         }
-        ImGui::SameLine(0);
-        if (ImGui::Button2("pause", ImVec2(sw, sh), ImDrawCornerFlags_None,
-                           app_is_paused())) {
+        if (ImGui::SegmentedButton("pause", sz, app_is_paused())) {
             app_pause();
         }
-        ImGui::SameLine(0);
-        ImGui::Button2("step", ImVec2(sw, sh), ImDrawCornerFlags_Right);
-        ImGui::PopStyleVar();
+        ImGui::SegmentedButton("step", sz);
+        ImGui::EndSegmentedButtons();
         ImGui::End();
     }
 }
@@ -232,9 +145,9 @@ void InspectorWindow(World *w) {
     Toolbar(w);
     //    if (selectedEntity >= w->entityCount) return;
     auto size = ImGui::GetIO().DisplaySize;
-    float height = (size.y - toolbarHeight) / 2;
-    ImGui::SetNextWindowSize(ImVec2(width, height));
-    ImGui::SetNextWindowPos(ImVec2(size.x - width, size.y - height));
+    float height = size.y - g_style.toolbarHeight;
+    ImGui::SetNextWindowSize(ImVec2(g_style.inspectorWidth, height));
+    ImGui::SetNextWindowPos(ImVec2(size.x - g_style.inspectorWidth, g_style.toolbarHeight));
     ImGui::Begin("Inspector");
 
     ImGui::Checkbox("debug", &inspector_debug_mode);
@@ -350,25 +263,64 @@ void InspectorWindow(World *w) {
     ImGui::End();
 }
 
-void AssetWindow() {
+#include "render_d3d12.hpp"
+
+void AssetWindow(World *w) {
     auto size = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowSize(ImVec2(size.x - width, 200));
-    ImGui::SetNextWindowPos(ImVec2(0, size.y - 200));
+    ImGui::SetNextWindowSize(ImVec2(size.x - g_style.inspectorWidth, g_style.assetHeight));
+    ImGui::SetNextWindowPos(ImVec2(0, size.y - g_style.assetHeight));
     ImGui::Begin("Assets");
     ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
+
+    float window_visible_x2 =
+        ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+
+    SingletonSelection *selection =
+        (SingletonSelection *)WorldGetSingletonComponent(w,
+                                                         SingletonSelectionID);
+
     if (ImGui::BeginTabBar("Assets", tab_bar_flags)) {
-        if (ImGui::BeginTabItem("All")) {
+        if (ImGui::BeginTabItem("Texture")) {
+            auto count = AssetTypeCount(AssetTypeTexture);
+            for (int i = 0; i < count; ++i) {
+                ImGuiStyle &style = ImGui::GetStyle();
+                ImVec2 button_sz(64, 64);
+                Asset *asset = AssetGet2(AssetTypeTexture, i);
+                AssetID aid = asset->id;
+                auto handle =
+                    GetGPUHandle((Texture *)asset->ptr);
+                ImTextureID id = *(ImTextureID *)&handle;
+                if (selection->selectedAsset == aid) {
+                    button_sz.x -= 2;
+                    button_sz.y -= 2;
+                    ImGui::Image(id, button_sz, {0, 0}, {1, 1}, {1, 1, 1, 1},
+                                 {0, 0.5, 1, 1});
+                } else {
+                    ImGui::Image(id, button_sz);
+                }
+                if (ImGui::IsItemClicked()) {
+                    SingletonSelectionSetSelectedAsset(selection, aid);
+                }
+                float last_button_x2 = ImGui::GetItemRectMax().x;
+                float next_button_x2 =
+                    last_button_x2 + style.ItemSpacing.x +
+                    button_sz.x;  // Expected position if next button was on
+                                  // same line
+                if (next_button_x2 < window_visible_x2) {
+                    ImGui::SameLine();
+                }
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Mesh")) {
             ImGui::Text("This is the Avocado tab!\nblah blah blah blah blah");
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Texture")) {
-            ImGui::EndTabItem();
-        }
         if (ImGui::BeginTabItem("AnimationClip")) {
             ImGui::Text("This is the Cucumber tab!\nblah blah blah blah blah");
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("All")) {
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();

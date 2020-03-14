@@ -486,14 +486,14 @@ int app_frame_end() {
 
 void HierarchyWindow(World *w);
 void InspectorWindow(World *w);
-void AssetWindow();
+void AssetWindow(World *w);
 void ConsoleWindow();
 void StatisticsWindow(World *w, JSRuntime *rt);
 
 int app_render_ui() {
     HierarchyWindow(w);
     InspectorWindow(w);
-    AssetWindow();
+    AssetWindow(w);
     StatisticsWindow(w, rt);
     ConsoleWindow();
 

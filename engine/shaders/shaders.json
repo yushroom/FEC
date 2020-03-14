@@ -1,0 +1,6 @@
+[
+    "Skybox.shader",
+    "pbrMetallicRoughness.shader",
+    "Internal-Skinning.comp",
+    "unity/SceneViewSelected.shader"
+]

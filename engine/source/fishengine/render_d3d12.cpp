@@ -772,7 +772,8 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
     float4x4 view;
     float3 cameraPos, cameraDir;
     {
-        Transform* cameraT = (Transform *)EntityGetComponent(cameraEntity, w, TransformID);
+        Transform* cameraT =
+            (Transform*)EntityGetComponent(cameraEntity, w, TransformID);
         cameraDir = TransformGetForward(w, cameraT);
         cameraPos = TransformGetPosition(w, cameraT);
         float3 up = TransformGetUp(w, cameraT);
@@ -1744,4 +1745,25 @@ void CleanupDeviceD3D() {
         pDebug->Release();
     }
 #endif
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUHandle(Texture* texture) {
+    auto heap = g_pSrvDescHeap;
+    D3D12_GPU_DESCRIPTOR_HANDLE handle = heap->GetFirstGpuHandle();
+    if (texture != NULL) {
+        auto idx = g_Textures[texture->handle].srvIndex;
+        auto src = g_StaticSrvDescriptorHeap->GetCpuHandle(idx);
+        size_t start = 0;
+        try {
+            start = heap->Allocate();
+        } catch (std::exception& e) {
+            heap->Reset();
+            heap->Allocate(); // reserve for imgui;
+            start = heap->Allocate();
+        }
+        auto dst = heap->GetCpuHandle(start);
+        g_Device->CopyDescriptorsSimple(1, dst, src, heap->Type());
+        handle = heap->GetGpuHandle(start);
+    }
+    return handle;
 }

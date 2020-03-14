@@ -219,14 +219,14 @@ static ShaderReflectShader ReflectShader(ID3D10Blob* shader, ShaderType shaderTy
             //case D3D_SRV_DIMENSION_TEXTURE2DARRAY:
             //    t.dimension = TextureDimension::Tex2DArray;
             //    break;
-            //case D3D_SRV_DIMENSION_TEXTURECUBE:
-            //    t.dimension = TextureDimension::Cube;
-            //    break;
+            case D3D_SRV_DIMENSION_TEXTURECUBE:
+                t.type = "textureCube";
+                break;
             //case D3D_SRV_DIMENSION_TEXTURECUBEARRAY:
             //    t.dimension = TextureDimension::CubeArray;
             //    break;
             default:
-                abort();
+                exit(1);
             }
             _shader.images.push_back(t);
         }

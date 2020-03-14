@@ -1,6 +1,7 @@
 #include "asset.h"
 
 #include <map>
+#include <vector>
 
 #include "animation.h"
 #include "material.h"
@@ -18,16 +19,6 @@ static struct AssetClassDef defs[_AssetTypeCount];
 
 void AssetManagerInit() {}
 
-struct AssetWrap {
-    void *ptr = NULL;
-    AssetType type = AssetTypeUnknown;
-    AssetID id = 0;
-
-    AssetWrap() = default;
-    AssetWrap(void *ptr, AssetType type, AssetID id)
-        : ptr(ptr), type(type), id(id) {}
-};
-
 struct AssetManagerImpl {
    public:
     static AssetManagerImpl &GetInstance() {
@@ -37,39 +28,57 @@ struct AssetManagerImpl {
 
     AssetID Add(AssetType type, void *ptr) {
         AssetID id = nextAssetID++;
-        auto &a = assets[id];
-        a.ptr = ptr;
-        a.type = type;
-        a.id = id;
+        Asset *a = (Asset *)malloc(sizeof(Asset));
+        memset(a, 0, sizeof(Asset));
+        a->ptr = ptr;
+        a->type = type;
+        a->id = id;
+        assets[id] = a;
+        assetsForEachType[type].push_back(id);
         return id;
     }
 
-    void *Get(AssetID id) {
+    Asset *Get(AssetID id) {
         auto it = assets.find(id);
         if (it != assets.end()) {
-            return it->second.ptr;
+            return it->second;
         }
         return NULL;
     }
 
-    uint32_t GetCount(AssetType type) { return 0; }
+    Asset* Get2(AssetType type, uint32_t index) {
+        if (index >= assetsForEachType[type].size()) return NULL;
+        AssetID id = assetsForEachType[type][index];
+        return Get(id);
+    }
 
+    uint32_t GetCount(AssetType type) { return assetsForEachType[type].size(); }
 
     void Delete(AssetID id) {
         auto it = assets.find(id);
         if (it != assets.end()) {
-            void *asset = it->second.ptr;
+            Asset *asset = it->second;
+            void *ptr = asset->ptr;
             assets.erase(it);
-            defs[it->second.type].freeFunc(asset);
+            AssetType type = asset->type;
+            defs[type].freeFunc(ptr);
+            free(asset);
+
+            assetsForEachType[type].erase(
+                std::find(assetsForEachType[type].begin(),
+                          assetsForEachType[type].end(), id));
         }
     }
 
     void DeleteNoErase(AssetID id) {
         auto it = assets.find(id);
         if (it != assets.end()) {
-            void *asset = it->second.ptr;
-            defs[it->second.type].freeFunc(asset);
-            it->second.ptr = NULL;
+            Asset *asset = it->second;
+            void *ptr = asset->ptr;
+            AssetType type = asset->type;
+            defs[type].freeFunc(ptr);
+            free(asset);
+            it->second = NULL;
         }
     }
 
@@ -79,13 +88,18 @@ struct AssetManagerImpl {
         }
         assets.clear();
         nextAssetID = 1;
+        for (auto &li : assetsForEachType) {
+            li.clear();
+        }
     }
 
     ~AssetManagerImpl() { DeleteAll(); }
 
    private:
-    std::map<AssetID, AssetWrap> assets;
+    std::map<AssetID, Asset*> assets;
     AssetID nextAssetID = 1;
+
+    std::vector<AssetID> assetsForEachType[_AssetTypeCount];
 
    private:
     AssetManagerImpl() {
@@ -102,10 +116,11 @@ struct AssetManagerImpl {
 #define g AssetManagerImpl::GetInstance()
 
 AssetID AssetAdd(AssetType type, void *asset) { return g.Add(type, asset); }
-void *AssetGet(AssetID aid) { return g.Get(aid); }
+Asset *AssetGet(AssetID aid) { return g.Get(aid); }
+uint32_t AssetTypeCount(AssetType type) { return g.GetCount(type); }
+Asset *AssetGet2(AssetType type, uint32_t idx) { return g.Get2(type, idx); }
 void AssetDelete(AssetID aid) { g.Delete(aid); }
 void AssetDeleteAll() { g.DeleteAll(); }
-
 
 #include <microtar.h>
 
@@ -201,14 +216,14 @@ void LoadTAR(const char *path) {
             ret = ShaderDescFromTAR(name, &tar, &ps);
         }
         if (ret) {
-            //ShaderFromMemory(&vs, &ps);
+            // ShaderFromMemory(&vs, &ps);
         }
     }
     mtar_close(&tar);
 }
 
 struct AssetBundleImpl {
-    std::map<int, AssetWrap> assets;
+    std::map<int, Asset> assets;
 };
 
 AssetBundle *AssetBundleNew(const char *path) {

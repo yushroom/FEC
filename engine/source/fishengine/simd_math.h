@@ -334,8 +334,7 @@ static inline float3 float4x4_mul_point(const float4x4 m, float3 v) {
 float4x4 makeRotationFromQuaternion(quat q);
 
 static inline float4x4 quat_to_float4x4(const quat q) {
-    const float m = float4_length_squared(q);
-    assert(fabsf(m - 1) <= 1e-3f);
+    assert(fabsf(float4_length_squared(q) - 1) <= 1e-3f);
 #if 0
     float4x4 result;
     memset(&result, 0, sizeof(result));

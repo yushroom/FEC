@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,15 +19,23 @@ enum AssetType {
     AssetTypeMesh,
     AssetTypeSkin,
     AssetTypeAnimationClip,
+    AssetScript,
     _AssetTypeCount
 };
 typedef enum AssetType AssetType;
 
+typedef struct Asset {
+    AssetType type;
+    AssetID id;
+    bool fromFile;
+    char filePath[64];
+    void *ptr;
+} Asset;
+
 AssetID AssetAdd(AssetType type, void *asset);
-void *AssetGet(AssetID aid);
-void AssetTypeCount(AssetType type);
-void *AssetGet2(AssetType type, uint32_t idx);
-// void *AssetNew(AssetType type, AssetID *aid);
+Asset *AssetGet(AssetID aid);
+uint32_t AssetTypeCount(AssetType type);
+Asset *AssetGet2(AssetType type, uint32_t idx);
 void AssetDelete(AssetID aid);
 void AssetDeleteAll();
 

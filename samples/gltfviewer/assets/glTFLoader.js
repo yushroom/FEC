@@ -114,7 +114,6 @@ export class glTF {
             for (const a of duck.animations) {
                 const root = duck.nodes[0].entity;
                 let animation = root.GetComponent(fe.AnimationID);
-                print(a._targets);
                 const minNode = Math.min(...a._targets);
                 //const entityOffset = minNode;
                 if (animation) {
@@ -457,7 +456,6 @@ export function LoadglTFFromFile(path) {
                 const output = AccessorToTypedArray(sampler.output);
                 clip.SetCurve(target, input, output, channel.target.path);
             }
-            print(targets);
             a._targets = targets;
             a._clip = clip;
         }

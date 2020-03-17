@@ -461,6 +461,11 @@ export function LoadglTFFromFile(path) {
         }
     }
 
+    for (let b of duck.buffers)
+    {
+        b._buffer = null;
+    }
+
     const gltf = new glTF();
     gltf.duck = duck;
     return gltf;

@@ -34,6 +34,7 @@ namespace fs = std::filesystem;
 #include "statistics.h"
 #include "texture.h"
 #include "transform.h"
+#include "statistics.h"
 
 #if _DEBUG
 #define DX12_ENABLE_DEBUG_LAYER
@@ -270,8 +271,7 @@ void DeleteBuffer(BufferHandle handle) {
     b.byteLength = 0;
 }
 
-uint32_t CreateTexture(uint32_t width, uint32_t height, uint32_t mipmaps,
-                       Memory memory) {
+uint32_t CreateTexture(Memory memory, TextureDesc* desc) {
     ID3D12Resource* texture = nullptr;
     std::vector<D3D12_SUBRESOURCE_DATA> subresources;
     HRESULT hr = DirectX::CreateDDSTextureFromMemoryEx(
@@ -285,12 +285,32 @@ uint32_t CreateTexture(uint32_t width, uint32_t height, uint32_t mipmaps,
         g_Device, texture, g_StaticSrvDescriptorHeap->GetCpuHandle(idx));
     uint32_t handle = g_Textures.size();
     auto& t = g_Textures.emplace_back();
-    auto size = DirectX::GetTextureSize(texture);
+    //auto size = DirectX::GetTextureSize(texture);
+    const auto texDesc = texture->GetDesc();
     t.srvIndex = idx;
     t.resource = texture;
-    t.width = size.x;
-    t.height = size.y;
+    t.width = texDesc.Width;
+    t.height = texDesc.Height;
     t.state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+
+    const auto allocInfo = g_Device->GetResourceAllocationInfo(0, 1, &texDesc);
+    g_statistics.gpu.textureCount++;
+    g_statistics.gpu.textureSize += allocInfo.SizeInBytes;
+
+    if (desc) {
+        desc->width = t.width;
+        desc->height = t.height;
+        desc->mipmaps = texDesc.MipLevels;
+
+        TextureFormat format = TextureFormatInvalid;
+        switch (texDesc.Format) {
+            case DXGI_FORMAT_BC1_UNORM:
+                format = TextureFormatDXT1;
+                break;
+        }
+        desc->format = format;
+    }
+
     return handle;
 }
 
@@ -601,6 +621,11 @@ TextureHandle InternalCreateRenderTexture(const RenderTextureDescriptor& desc) {
         &heap, D3D12_HEAP_FLAG_NONE, &colorDesc, initState, &colorClearValue,
         IID_PPV_ARGS(&texture)));
 
+    const auto resDesc = texture->GetDesc();
+    const auto allocInfo = g_Device->GetResourceAllocationInfo(0, 1, &resDesc);
+    g_statistics.gpu.renderTextureCount++;
+    g_statistics.gpu.renderTextureSize += allocInfo.SizeInBytes;
+
     t.resource = texture;
     t.state = initState;
     t.format = dxgiFormat;
@@ -821,6 +846,7 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
         if (r->skin && (r->mesh->sb != 0) && (r->mesh->skinnedvb != 0)) {
             vbHandle = r->mesh->skinnedvb;
         }
+        if (vbHandle == 0) return 1;
         {
             D3D12_VERTEX_BUFFER_VIEW vbv = {};
             auto& b = g_Buffers[vbHandle];
@@ -941,6 +967,7 @@ int SimpleDraw(Transform* t, struct Renderable* r) {
         } else {
             g_pCommandList->DrawInstanced(MeshGetVertexCount(r->mesh), 1, 0, 0);
         }
+        g_statistics.gpu.drawCall++;
     }
 
     g_CBVInFlight[g_CurrentBackBufferIndex].emplace_back(std::move(cb1));
@@ -1022,6 +1049,8 @@ void FrameBegin() {
     g_pCommandList->RSSetViewports(1, &vp);
     CD3DX12_RECT rect(0, 0, LONG_MAX, LONG_MAX);
     g_pCommandList->RSSetScissorRects(1, &rect);
+
+    g_statistics.gpu.drawCall = 0;
 }
 
 void FrameEnd() {
@@ -1053,6 +1082,11 @@ void FrameEnd() {
 
     auto frameCtxt = &g_frameContext[g_frameIndex % NUM_FRAMES_IN_FLIGHT];
     frameCtxt->FenceValue = fenceValue;
+
+    {
+        const auto info = g_CBVMemory->GetStatistics(); 
+        g_statistics.cpu.uploadHeapSize = info.totalMemory;
+    }
 }
 
 D3D12_INPUT_LAYOUT_DESC GetVerextDecl(VertexDeclHandle handle);
@@ -1407,6 +1441,16 @@ bool CreateDeviceD3D(HWND hWnd) {
         }
     }
 
+    // Shader *skybox =
+    // ShaderFromFile(R"(E:\workspace\cengine\engine\shaders\runtime\d3d\Skybox)");
+    //
+    // ID3D12Resource* sky = nullptr;
+    // const wchar_t* path =
+    //    LR"(C:\Users\yushroom\Downloads\glTF-Sample-Environments-4eace30f795fa77f6e059e3b31aa640c08a82133\glTF-Sample-Environments-4eace30f795fa77f6e059e3b31aa640c08a82133\doge2\diffuse\diffuse_back_0.dds)";
+    // HRESULT hr = DirectX::CreateDDSTextureFromFile(
+    //    g_Device, *g_GPUResourceUploader, path, &sky);
+    // assert(SUCCEEDED(hr));
+
     return true;
 }
 
@@ -1465,6 +1509,12 @@ void CreateRenderTarget() {
         SetDebugObjectName(pBackBuffer, name.c_str());
         g_mainRenderTargetResource[i] = pBackBuffer;
     }
+
+    const auto resDesc = g_mainRenderTargetResource[0]->GetDesc();
+    const auto allocInfo = g_Device->GetResourceAllocationInfo(0, 1, &resDesc);
+    g_statistics.gpu.renderTextureCount++;
+    g_statistics.gpu.renderTextureSize +=
+        allocInfo.SizeInBytes * NUM_BACK_BUFFERS;
 }
 
 void CleanupRenderTarget() {

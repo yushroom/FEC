@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "asset.h"
 #include "array.h"
 #include "ecs.h"
 #include "simd_math.h"
@@ -53,6 +54,7 @@ void SkinFree(void *skin);
 
 struct Mesh {
     // public:
+    AssetID assetID;
     array vertices;
     array triangles;
     array boneWeights;

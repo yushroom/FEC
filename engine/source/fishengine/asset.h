@@ -28,7 +28,7 @@ typedef struct Asset {
     AssetType type;
     AssetID id;
     bool fromFile;
-    char filePath[64];
+    char filePath[128];
     void *ptr;
 } Asset;
 

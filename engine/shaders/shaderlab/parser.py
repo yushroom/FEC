@@ -352,7 +352,8 @@ def p_pair_type(p):
 	             | 2D
 	             | INT
 	             | VECTOR
-	             | RANGE'''
+	             | RANGE
+	             | CUBE'''
 	p[0] = p[1]
 
 

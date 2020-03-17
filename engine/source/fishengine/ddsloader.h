@@ -4,11 +4,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "texture_format.h"
 
 typedef struct {
     uint32_t width;
     uint32_t height;
     uint32_t mipmaps;
+    TextureFormat format;
 } TextureDesc;
 
 #ifdef __cplusplus

@@ -58,21 +58,21 @@ static void WorldInit(World *w) {
     w->entityCount = 0;
     w->systemCount = 0;
 
-    array_init(&w->singletonComponents, sizeof(void *), 128);
-    w->singletonComponents.size = 128;
-    //	for (int i = 0; i < def->singletonComponentDefCount; ++i) {
-    //		const ComponentDef *d = def->singletonComponentDefs[i];
-    //        ComponentArrayInit(w->componentArrays + d->type, d->type, d->size,
-    //        initCapacity);
-    //	}
+    for (int i = 0; i < w->def.singletonComponentDefCount; ++i) {
+        ComponentDef *def = &w->def.singletonComponentDefs[i];
+        void *scomp = malloc(def->size);
+        if (def->ctor) {
+            def->ctor(scomp);
+        }
+        WorldAddSingletonComponent(w, scomp, def->type);
+    }
 }
 
 World *WorldCreate(WorldDef *def) {
     World *w = malloc(sizeof(World));
+    memset(w, 0, sizeof(World));
     w->def = *def;
     WorldInit(w);
-
-    g_statistics.cpu.ecsSize += sizeof(World);
 
     // use entity 0
     WorldCreateEntity(w);
@@ -84,11 +84,12 @@ void WorldFree(World *w) {
     for (int i = 0; i < w->componentArrayCount; ++i) {
         ComponentArrayFree(w->componentArrays + i);
     }
-    for (int i = 0; i < w->singletonComponents.size; ++i) {
-        void **p = array_at(&w->singletonComponents, i);
-        free(*p);
+    for (int i = 0; i < _countof(w->singletonComponents); ++i) {
+        void *s = w->singletonComponents[i];
+        if (s) {
+            free(s);
+        }
     }
-    array_free(&w->singletonComponents);
     free(w);
 }
 
@@ -101,7 +102,6 @@ void WorldClear(World *w) {
     }
     w->systemCount = 0;
     memset(w->systems, 0, sizeof(w->systems));
-    w->singletonComponents.size = 0;
 
     // use entity 0
     WorldCreateEntity(w);
@@ -110,14 +110,12 @@ void WorldClear(World *w) {
 void WorldAddSystem(World *w, System f) { w->systems[w->systemCount++] = f; }
 
 void WorldAddSingletonComponent(World *w, void *comp, int ID) {
-    //	void **p = array_next(&w->singletonComponents);
-    void **p = w->singletonComponents.ptr + w->singletonComponents.stride * ID;
-    *p = comp;
+    assert(w->singletonComponents[ID] == NULL);
+    w->singletonComponents[ID] = comp;
 }
 
 void *WorldGetSingletonComponent(World *w, int ID) {
-    void **p = w->singletonComponents.ptr + w->singletonComponents.stride * ID;
-    return *p;
+    return w->singletonComponents[ID];
 }
 
 void WorldTick(World *w) {
@@ -135,13 +133,13 @@ void WorldPrintStats(World *w) {
                w->def.componentDefs[a->type].name, a->type, a->m.capacity,
                a->m.size);
     }
-    for (int i = 0; i < w->singletonComponents.size; ++i) {
-        void **p = array_at(&w->singletonComponents, i);
-        void *c = *p;
-        if (c != NULL)
-            printf("  singleton component %s: %p\n",
-                   w->def.singletonComponentDefs[i].name, c);
-    }
+    //for (int i = 0; i < w->singletonComponents.size; ++i) {
+    //    void **p = array_at(&w->singletonComponents, i);
+    //    void *c = *p;
+    //    if (c != NULL)
+    //        printf("  singleton component %s: %p\n",
+    //               w->def.singletonComponentDefs[i].name, c);
+    //}
     puts("}");
 }
 

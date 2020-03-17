@@ -1,7 +1,6 @@
 #include "app.h"
 
 #include <assert.h>
-#include <libregexp.h>
 #ifdef APPLE
 #include <rawfsevents.h>
 #endif
@@ -84,60 +83,6 @@ static ComponentDef g_componentDef[] = {COMP(Transform), COMP(Renderable),
 static ComponentDef g_singleComponentDef[] = {
     COMP(SingletonTransformManager), COMP(SingletonInput),
     COMP2(SingletonTime), COMP(SingletonSelection)};
-
-#if 0
-
-int main()
-{
-	size_t count = 0;
-	count += sizeof(World);
-	count += (sizeof(Transform) + sizeof(Rotator)) * MaxEntity;
-	count += sizeof(TransformManager);
-	printf("%zu %zuMB\n", count, count/1024/1024);
-	
-	WorldDef def;
-	def.componentDefs = g_componentDef;
-	def.componentDefCount = countof(g_componentDef);
-	def.singletonComponentDefs = g_singleComponentDef;
-	def.singletonComponentDefCount = countof(g_singleComponentDef);
-	
-	World *w = WorldCreate(&def);
-	WorldPrintStats(w);
-	for (int i = 0; i < MaxEntity; ++i) {
-		Entity e = WorldCreateEntity(w);
-		Transform *t = EntityAddComponent(e, w, TransformID);
-		TransformInit(t);
-		Rotator *r = EntityAddComponent(e, w, RotatorID);
-		r->speed = 0.1f * i;
-	}
-//	WorldAddSystem(w, RotatorSystem);
-	WorldAddSystem(w, TransformSystem);
-//	WorldAddSystem(w, RenderSystem);
-	TransformManager *t;
-	{
-		t = aligned_alloc(16, sizeof(TransformManager));
-		memset(t, 0, sizeof(TransformManager));
-		WorldAddSingletonComponent(w, t, TransformManagerID);
-	}
-	WorldPrintStats(w);
-	
-	TransformSetParent(t, 1, 2);
-	TransformPrintHierarchy(t);
-	
-	clock_t start, end;
-	double duration;
-	start = clock();
-	const int frames = 1000;
-	for (int i = 0; i < frames; ++i) {
-		WorldTick(w);
-	}
-	end = clock();
-	duration = (double)(end - start) / CLOCKS_PER_SEC;
-	printf("time: %lfs %lfs per frame\n", duration, duration/frames);
-	WorldFree(w);
-	return 0;
-}
-#else
 
 #include <cutils.h>
 #include <quickjs-libc.h>
@@ -377,16 +322,6 @@ int app_init() {
     WorldAddSystem(w, FreeCameraSystem);
     WorldAddSystem(w, RenderSystem);
     SingletonTransformManager *tm;
-    {
-        for (int i = 0; i < countof(g_singleComponentDef); ++i) {
-            ComponentDef *def = &g_singleComponentDef[i];
-            void *scomp = malloc(def->size);
-            if (def->ctor) {
-                def->ctor(scomp);
-            }
-            WorldAddSingletonComponent(w, scomp, def->type);
-        }
-    }
 
     SetDefaultWorld(w);
     js_init_module_fishengine(ctx, "FishEngine");
@@ -420,16 +355,6 @@ int app_reload() {
     WorldAddSystem(w, AnimationSystem);
     WorldAddSystem(w, FreeCameraSystem);
     WorldAddSystem(w, RenderSystem);
-    {
-        for (int i = 0; i < countof(g_singleComponentDef); ++i) {
-            ComponentDef *def = &g_singleComponentDef[i];
-            void *scomp = malloc(def->size);
-            if (def->ctor) {
-                def->ctor(scomp);
-            }
-            WorldAddSingletonComponent(w, scomp, def->type);
-        }
-    }
     SetDefaultWorld(w);
 
     //	int flags = JS_EVAL_TYPE_MODULE;
@@ -513,59 +438,6 @@ int app_render_ui() {
     return 0;
 }
 
-// TODO: libregex in quickjs need a JSContext
-// TODO: utf8 support
-void open_file_by_callstack(const uint8_t *callstack) {
-    const char *re =
-        "at.+\\((.+)\\:(\\d+)\\)";  // match "at
-                                    // function_name(file_path:line_number)"
-    const char *re2 = "at\\s(.+)\\:(\\d+)";  // match "at file_path:line_number"
-
-    int re_bytecode_len;
-    char error_msg[64];
-    int flags = 0;
-
-    uint8_t *bytecode =
-        lre_compile(&re_bytecode_len, error_msg, countof(error_msg), re,
-                    strlen(re), flags, ctx);
-    const int capture_count = lre_get_capture_count(bytecode);
-    assert(capture_count == 3);
-    uint8_t *capture[capture_count * 2];
-    int matched = lre_exec(&capture[0], bytecode, callstack, 0,
-                           strlen((const char *)callstack), 0, ctx);
-    if (matched != 1) {
-        js_free(ctx, bytecode);
-        bytecode = lre_compile(&re_bytecode_len, error_msg, countof(error_msg),
-                               re2, strlen(re2), flags, ctx);
-        assert(capture_count == 3);
-        matched = lre_exec(&capture[0], bytecode, callstack, 0,
-                           strlen((const char *)callstack), 0, ctx);
-    }
-    printf("%s\n", matched ? "matched" : "no match");
-    if (matched == 1) {
-        char command[1024] = {0};
-#if WIN32
-        // https://stackoverflow.com/questions/2642551/windows-c-system-call-with-spaces-in-command
-        //strcat(command, "\"\"C:\\Program Files\\Sublime Text 3\\subl.exe\" \"");
-        strcat(command,
-               "\"\"C:\\Users\\yushroom\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\" -g \"");
-#else
-        strcat(command,
-               "\"/Applications/Sublime "
-               "Text.app/Contents/SharedSupport/bin/subl\" \"");
-#endif
-        strncat(command, (const char *)capture[2], capture[3] - capture[2]);
-        strcat(command, "\":");
-        strncat(command, (const char *)capture[4], capture[5] - capture[4]);
-#if WIN32
-        strcat(command, "\"");
-#endif
-        printf("command: %s\n", command);
-        system(command);
-    }
-    js_free(ctx, bytecode);
-}
-
 void app_play() {
     g_app.is_playing = true;
     g_app.is_paused = false;
@@ -580,5 +452,3 @@ void app_pause() {
 void app_step();
 bool app_is_playing() { return g_app.is_playing && !g_app.is_paused; }
 bool app_is_paused() { return g_app.is_playing && g_app.is_paused; }
-
-#endif

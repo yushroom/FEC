@@ -2,6 +2,7 @@
 #define RHI_H
 
 #include "transform.h"
+#include "ddsloader.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,8 +38,7 @@ typedef uint32_t TextureHandle;
 // set memory.buffer = NULL if you want to create an empty buffer
 BufferHandle CreateBuffer(Memory memory, GPUResourceUsageFlags usage);
 void UpdateBuffer(BufferHandle handle, Memory memory);
-uint32_t CreateTexture(uint32_t width, uint32_t height, uint32_t mipmaps,
-                       Memory memory);
+uint32_t CreateTexture(Memory memory, TextureDesc *desc);
 void DeleteBuffer(BufferHandle handle);
 void DeleteTexture(uint32_t textureID);
 

@@ -75,7 +75,8 @@ struct World {
     uint32_t systemCount;
     System systems[32];
 
-    array singletonComponents;  // std::vector<void*>
+    //uint32_t singletonComponentCount;
+    void* singletonComponents[32];
 
     Entity componentEntityMap[MaxComponentType][MaxEntity];
 };

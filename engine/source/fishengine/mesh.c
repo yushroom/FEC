@@ -36,7 +36,7 @@ void *MeshNew() {
     Mesh *mesh;
     mesh = malloc(sizeof(*mesh));
     MeshInit(mesh);
-    AssetAdd(AssetTypeMesh, mesh);
+    mesh->assetID = AssetAdd(AssetTypeMesh, mesh);
     return mesh;
 }
 

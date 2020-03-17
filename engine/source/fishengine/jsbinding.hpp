@@ -282,6 +282,13 @@ static inline void array_from_TypedArray(array *a, TypedArray *ta) {
     memcpy(a->ptr, ta->buffer, ta->byteLength);
 }
 
+//static inline JSClassID TypeIDToClassID(int typeID) {
+//    switch (typeID) {
+//        case TransformID:
+//            return JSGetClassID<Transform>();
+//    }
+//}
+
 #include "animation.h"
 #include "asset.h"
 #include "camera.h"

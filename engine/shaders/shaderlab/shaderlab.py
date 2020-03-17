@@ -19,6 +19,7 @@ keywords = {
 	"Fallback": "FALLBACK",
 	"CustomEditor": "CUSTOMEDITOR",
 	"2D": "2D",
+	"Cube": "CUBE",
 	"Color": "COLOR",
 	# "Off": "OFF",
 	"BindChannels": "BINDCHANNELS",

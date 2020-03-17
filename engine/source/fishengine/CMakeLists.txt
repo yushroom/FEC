@@ -19,8 +19,10 @@ add_library(FishEngine
     light.h light.c
     
     asset.h asset.cpp
+    script.h script.c
     shader.h shader.cpp shader_internal.hpp shader_util.h
     mesh.h mesh.c vertexdecl.h
+    texture_format.h
     texture.h texture.c
     material.h material.cpp material_internal.hpp
     rhi.h

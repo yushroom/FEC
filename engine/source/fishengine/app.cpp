@@ -6,17 +6,17 @@
 #include "animation.h"
 #include "asset.h"
 #include "camera.h"
+#include "ddsloader.h"
 #include "debug.h"
 #include "ecs.h"
+#include "imgui_extra.hpp"
+#include "material_internal.hpp"
 #include "mesh.h"
 #include "renderable.h"
+#include "shader_internal.hpp"
+#include "singleton_selection.h"
 #include "statistics.h"
 #include "transform.h"
-#include "ddsloader.h"
-#include "shader_internal.hpp"
-#include "material_internal.hpp"
-#include "singleton_selection.h"
-#include "imgui_extra.hpp"
 
 extern "C" {
 void HierarchyWindow(World *w);
@@ -24,7 +24,6 @@ void InspectorWindow(World *w);
 void AssetWindow(World *w);
 void StatisticsWindow(World *w, JSRuntime *rt);
 void ConsoleWindow();
-void open_file_by_callstack(const uint8_t *callstack);
 const char *ApplicationFilePath();
 void LoadTAR();
 }
@@ -139,7 +138,34 @@ void Toolbar(World *world) {
 
 static bool inspector_debug_mode = false;
 
+#include "render_d3d12.hpp"
 #include "shader_util.h"
+
+void ImGuiTexture(Texture *t, ImVec2 size) {
+    if (t) {
+        auto handle = GetGPUHandle(t);
+        ImTextureID id = *(ImTextureID *)&handle;
+        ImGui::Image(id, size);
+    }
+}
+
+void AssetInspectorWindow(World *w, AssetID assetID) {
+    Asset *asset = AssetGet(assetID);
+    if (asset == NULL) return;
+
+    ImGui::TextWrapped("path: %s", asset->filePath);
+    if (asset->type == AssetTypeTexture) {
+        Texture *t = (Texture *)asset->ptr;
+        ImGui::Text("Width: %u", t->width);
+        ImGui::Text("Height: %u", t->height);
+        float w = ImGui::GetContentRegionAvailWidth();
+        ImGuiTexture(t, {w, w});
+    } else if (asset->type == AssetTypeMesh) {
+        Mesh *mesh = (Mesh *)asset->ptr;
+        ImGui::Text("Vertex Count: %u", MeshGetVertexCount(mesh));
+        ImGui::Text("Triangle Count: %u", MeshGetIndexCount(mesh) / 3);
+    }
+}
 
 void InspectorWindow(World *w) {
     Toolbar(w);
@@ -147,127 +173,149 @@ void InspectorWindow(World *w) {
     auto size = ImGui::GetIO().DisplaySize;
     float height = size.y - g_style.toolbarHeight;
     ImGui::SetNextWindowSize(ImVec2(g_style.inspectorWidth, height));
-    ImGui::SetNextWindowPos(ImVec2(size.x - g_style.inspectorWidth, g_style.toolbarHeight));
+    ImGui::SetNextWindowPos(
+        ImVec2(size.x - g_style.inspectorWidth, g_style.toolbarHeight));
     ImGui::Begin("Inspector");
 
-    ImGui::Checkbox("debug", &inspector_debug_mode);
+    SingletonSelection *selection =
+        (SingletonSelection *)WorldGetSingletonComponent(w,
+                                                         SingletonSelectionID);
+    if (selection->selectedEntity != 0) {
+        ImGui::Checkbox("debug", &inspector_debug_mode);
 
-    if (selectedEntity != 0 && selectedEntity < w->entityCount) {
-        ImGui::Text("Transform");
-        SingletonTransformManager *tm =
-            (SingletonTransformManager *)WorldGetSingletonComponent(
-                w, SingletonTransformManagerID);
-        Transform *t = TransformGet(w, selectedEntity);
-        uint32_t idx = WorldGetComponentIndex(w, t, TransformID);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 2));
-        if (ImGui::InputFloat3("position", &t->localPosition.x)) {
-            TransformSetDirty(w, t);
-        }
-        auto eulerHint = tm->LocalEulerAnglesHints[idx];
-        float3 euler;
-        bool useHint = !float3_is_zero(eulerHint);
-        if (useHint)
-            euler = eulerHint;
-        else
-            euler = quat_to_euler(t->localRotation);
-        if (ImGui::InputFloat3("rotation", &euler.x)) {
-            t->localRotation = euler_to_quat(euler);
-            tm->LocalEulerAnglesHints[idx] = euler;
-            TransformSetDirty(w, t);
-        }
-        if (ImGui::InputFloat3("scale", &t->localScale.x)) {
-            TransformSetDirty(w, t);
-        }
-        if (inspector_debug_mode) {
-
-            ImGui::Text("parent: %u", t->parent);
-            ImGui::Text("firstChild: %u", t->firstChild);
-            ImGui::Text("nextSibling: %u", t->nextSibling);
-
-            float3 position = TransformGetPosition(w, t);
-            ImGui::InputFloat3("wposition", &position.x);
-
-            float4 q = t->localRotation;
-            if (ImGui::InputFloat4("qrotation", (float *)&q)) {
-                t->localRotation = q;
+        if (selectedEntity != 0 && selectedEntity < w->entityCount) {
+            ImGui::Text("Transform");
+            SingletonTransformManager *tm =
+                (SingletonTransformManager *)WorldGetSingletonComponent(
+                    w, SingletonTransformManagerID);
+            Transform *t = TransformGet(w, selectedEntity);
+            uint32_t idx = WorldGetComponentIndex(w, t, TransformID);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 2));
+            if (ImGui::InputFloat3("position", &t->localPosition.x)) {
                 TransformSetDirty(w, t);
             }
+            auto eulerHint = tm->LocalEulerAnglesHints[idx];
+            float3 euler;
+            bool useHint = !float3_is_zero(eulerHint);
+            if (useHint)
+                euler = eulerHint;
+            else
+                euler = quat_to_euler(t->localRotation);
+            if (ImGui::InputFloat3("rotation", &euler.x)) {
+                t->localRotation = euler_to_quat(euler);
+                tm->LocalEulerAnglesHints[idx] = euler;
+                TransformSetDirty(w, t);
+            }
+            if (ImGui::InputFloat3("scale", &t->localScale.x)) {
+                TransformSetDirty(w, t);
+            }
+            if (inspector_debug_mode) {
+                ImGui::Text("parent: %u", t->parent);
+                ImGui::Text("firstChild: %u", t->firstChild);
+                ImGui::Text("nextSibling: %u", t->nextSibling);
 
-            ImGui::Text("tm.mod: %u", tm->modified);
-            ImGui::Text("mod: %u", tm->H[idx].modified);
-        }
-        ImGui::PopStyleVar();
+                float3 position = TransformGetPosition(w, t);
+                ImGui::InputFloat3("wposition", &position.x);
 
-        Camera *camera =
-            (Camera *)EntityGetComponent(selectedEntity, w, CameraID);
-        if (camera) {
-            ImGui::Separator();
-            ImGui::TextUnformatted("Camera");
-        }
+                float4 q = t->localRotation;
+                if (ImGui::InputFloat4("qrotation", (float *)&q)) {
+                    t->localRotation = q;
+                    TransformSetDirty(w, t);
+                }
 
-        Renderable *renderable =
-            (Renderable *)EntityGetComponent(selectedEntity, w, RenderableID);
-        if (renderable) {
-            ImGui::Separator();
-            ImGui::TextUnformatted("Renderable");
-            if (renderable->material) {
-                Material *m = renderable->material;
-                if (m->shader) {
-                    Shader *s = m->shader;
-                    int count = ShaderUtilGetPropertyCount(s);
-                    for (int i = 0; i < count; ++i) {
-                        auto type = ShaderUtilGetPropertyType(s, i);
-                        const char *name = ShaderUtilGetPropertyName(s, i);
-                        if (type == ShaderPropertyTypeFloat) {
+                ImGui::Text("tm.mod: %u", tm->modified);
+                ImGui::Text("mod: %u", tm->H[idx].modified);
+            }
+            ImGui::PopStyleVar();
+
+            Camera *camera =
+                (Camera *)EntityGetComponent(selectedEntity, w, CameraID);
+            if (camera) {
+                ImGui::Separator();
+                ImGui::TextUnformatted("Camera");
+            }
+
+            Renderable *renderable = (Renderable *)EntityGetComponent(
+                selectedEntity, w, RenderableID);
+            if (renderable) {
+                ImGui::Separator();
+                ImGui::TextUnformatted("Renderable");
+                if (renderable->material) {
+                    Material *m = renderable->material;
+                    if (m->shader) {
+                        Shader *s = m->shader;
+                        int count = ShaderUtilGetPropertyCount(s);
+                        for (int i = 0; i < count; ++i) {
+                            auto type = ShaderUtilGetPropertyType(s, i);
+                            const char *name = ShaderUtilGetPropertyName(s, i);
                             int nameID = ShaderPropertyToID(name);
-                            float v = MaterialGetFloat(m, nameID);
-                            if (ImGui::SliderFloat(name, &v, 0, 1)) {
-                                MaterialSetFloat(m, nameID, v);
-                            }
-                        } else if (type == ShaderPropertyTypeVector ||
-                                   type == ShaderPropertyTypeColor) {
-                            int nameID = ShaderPropertyToID(name);
-                            float4 v = MaterialGetVector(m, nameID);
-                            float c[4] = {v.x, v.y, v.z, v.w};
-                            if (ImGui::ColorEdit4(name, c)) {
-                                MaterialSetVector(
-                                    m, nameID,
-                                    float4_make(c[0], c[1], c[2], c[3]));
+                            if (type == ShaderPropertyTypeFloat) {
+                                float v = MaterialGetFloat(m, nameID);
+                                if (ImGui::SliderFloat(name, &v, 0, 1)) {
+                                    MaterialSetFloat(m, nameID, v);
+                                }
+                            } else if (type == ShaderPropertyTypeVector ||
+                                       type == ShaderPropertyTypeColor) {
+                                float4 v = MaterialGetVector(m, nameID);
+                                float c[4] = {v.x, v.y, v.z, v.w};
+                                if (ImGui::ColorEdit4(name, c)) {
+                                    MaterialSetVector(
+                                        m, nameID,
+                                        float4_make(c[0], c[1], c[2], c[3]));
+                                }
+                            } else if (type == ShaderPropertyTypeTexture) {
+                                Texture *t = MaterialGetTexture(m, nameID);
+                                ImGui::TextUnformatted(name);
+                                if (t) {
+                                    auto handle = GetGPUHandle(t);
+                                    ImTextureID id = *(ImTextureID *)&handle;
+                                    if (ImGui::ImageButton(id, {64, 64})) {
+                                        // ???
+                                        SingletonSelectionSetSelectedAsset(
+                                            selection, t->assetID);
+                                    }
+                                    if (ImGui::IsItemClicked()) {
+                                        SingletonSelectionSetSelectedAsset(
+                                            selection, t->assetID);
+                                    }
+                                }
                             }
                         }
-                    }
-                    ImGui::TextUnformatted("Keywords");
-                    for (auto &kw : ShaderGetKeywords(s)) {
-                        bool enabled = MaterialIsKeywordEnabled(m, kw.c_str());
-                        if (ImGui::Checkbox(kw.c_str(), &enabled))
-                            MaterialSetKeyword(m, kw.c_str(), enabled);
-                    }
-                    ImGui::TextUnformatted("Shader Variant");
-                    for (int i = 0; i < s->passCount; ++i) {
-                        int var = MaterialGetVariantIndex(m, i);
-                        ImGui::Text("Pass %d: %d", i, var);
+                        ImGui::TextUnformatted("Keywords");
+                        for (auto &kw : ShaderGetKeywords(s)) {
+                            bool enabled =
+                                MaterialIsKeywordEnabled(m, kw.c_str());
+                            if (ImGui::Checkbox(kw.c_str(), &enabled))
+                                MaterialSetKeyword(m, kw.c_str(), enabled);
+                        }
+                        ImGui::TextUnformatted("Shader Variant");
+                        for (int i = 0; i < s->passCount; ++i) {
+                            int var = MaterialGetVariantIndex(m, i);
+                            ImGui::Text("Pass %d: %d", i, var);
+                        }
                     }
                 }
             }
-        }
 
-        Animation *animation =
-            (Animation *)EntityGetComponent(selectedEntity, w, AnimationID);
-        if (animation) {
-            ImGui::Separator();
-            ImGui::TextUnformatted("Animation");
-            ImGui::LabelText("localTimer", "%f", animation->localTime);
-            ImGui::Checkbox("playing", &animation->playing);
+            Animation *animation =
+                (Animation *)EntityGetComponent(selectedEntity, w, AnimationID);
+            if (animation) {
+                ImGui::Separator();
+                ImGui::TextUnformatted("Animation");
+                ImGui::LabelText("localTimer", "%f", animation->localTime);
+                ImGui::Checkbox("playing", &animation->playing);
+            }
         }
+    } else if (selection->selectedAsset != 0) {
+        AssetInspectorWindow(w, selection->selectedAsset);
     }
     ImGui::End();
 }
 
-#include "render_d3d12.hpp"
-
 void AssetWindow(World *w) {
     auto size = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowSize(ImVec2(size.x - g_style.inspectorWidth, g_style.assetHeight));
+    ImGui::SetNextWindowSize(
+        ImVec2(size.x - g_style.inspectorWidth, g_style.assetHeight));
     ImGui::SetNextWindowPos(ImVec2(0, size.y - g_style.assetHeight));
     ImGui::Begin("Assets");
     ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_None;
@@ -287,8 +335,7 @@ void AssetWindow(World *w) {
                 ImVec2 button_sz(64, 64);
                 Asset *asset = AssetGet2(AssetTypeTexture, i);
                 AssetID aid = asset->id;
-                auto handle =
-                    GetGPUHandle((Texture *)asset->ptr);
+                auto handle = GetGPUHandle((Texture *)asset->ptr);
                 ImTextureID id = *(ImTextureID *)&handle;
                 if (selection->selectedAsset == aid) {
                     button_sz.x -= 2;
@@ -313,7 +360,37 @@ void AssetWindow(World *w) {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Mesh")) {
-            ImGui::Text("This is the Avocado tab!\nblah blah blah blah blah");
+            auto count = AssetTypeCount(AssetTypeMesh);
+            for (int i = 0; i < count; ++i) {
+                ImGuiStyle &style = ImGui::GetStyle();
+                ImVec2 button_sz(64, 64);
+                Asset *asset = AssetGet2(AssetTypeMesh, i);
+                AssetID aid = asset->id;
+                std::string name = "Mesh";
+                name += std::to_string(i);
+                ImGui::Button(name.c_str(), button_sz);
+                // auto handle = GetGPUHandle((Texture *)asset->ptr);
+                // ImTextureID id = *(ImTextureID *)&handle;
+                // if (selection->selectedAsset == aid) {
+                //    button_sz.x -= 2;
+                //    button_sz.y -= 2;
+                //    ImGui::Image(id, button_sz, {0, 0}, {1, 1}, {1, 1, 1, 1},
+                //                 {0, 0.5, 1, 1});
+                //} else {
+                //    ImGui::Image(id, button_sz);
+                //}
+                if (ImGui::IsItemClicked()) {
+                    SingletonSelectionSetSelectedAsset(selection, aid);
+                }
+                float last_button_x2 = ImGui::GetItemRectMax().x;
+                float next_button_x2 =
+                    last_button_x2 + style.ItemSpacing.x +
+                    button_sz.x;  // Expected position if next button was on
+                                  // same line
+                if (next_button_x2 < window_visible_x2) {
+                    ImGui::SameLine();
+                }
+            }
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("AnimationClip")) {
@@ -357,6 +434,9 @@ void StatisticsWindow(World *w, JSRuntime *rt) {
     g_statistics.cpu.ecsSize = WorldGetMemoryUsage(w);
     ImGui::Text("    ecs: %.2f MB", MB(g_statistics.cpu.ecsSize));
     total2 += g_statistics.cpu.ecsSize;
+    ImGui::Text("    upload heap: %.2f MB",
+                MB(g_statistics.cpu.uploadHeapSize));
+    total2 += g_statistics.cpu.uploadHeapSize;
     ImGui::Text("    total: %.2f MB", MB(total2));
     ImGui::Separator();
 
@@ -376,6 +456,33 @@ void StatisticsWindow(World *w, JSRuntime *rt) {
     ImGui::Text("Total: %.2f MB", MB(total + total2 + usage.malloc_size));
 
     ImGui::End();
+}
+
+#include <iostream>
+#include <regex>
+#include <fmt/format.h>
+
+void open_file_at_line(const char *file, uint32_t line) {
+    const char *vsc_path =
+        R"(C:\Users\yushroom\AppData\Local\Programs\Microsoft VS Code\Code.exe)";
+    const auto command = fmt::format(R"(""{}" -g "{}":{}")", vsc_path, file, line);
+    printf("command: %s\n", command.c_str());
+    system(command.c_str());
+}
+
+void open_file_by_callstack(const char *callstack) {
+    std::regex rgx("at.+\\((.+)\\:(\\d+)\\)");
+    std::regex rgx2("at\\s(.+)\\:(\\d+)");
+    std::smatch matches;
+
+    std::string s = callstack;
+    if (std::regex_search(s, matches, rgx) ||
+        std::regex_search(s, matches, rgx2)) {
+        if (matches.size() >= 3) {
+            open_file_at_line(matches[1].str().c_str(),
+                              std::atoi(matches[2].str().c_str()));
+        }
+    }
 }
 
 void ConsoleWindow() {
@@ -404,7 +511,7 @@ void ConsoleWindow() {
             system(command);
             puts("copyed!");
 #endif
-            open_file_by_callstack((uint8_t *)msg);
+            open_file_by_callstack(msg);
         }
         if (ImGui::IsItemHovered()) {
             ImGui::Text("%s", callstack + 1);
@@ -412,7 +519,6 @@ void ConsoleWindow() {
     }
     ImGui::End();
 }
-
 
 #ifdef __APPLE__
 #include "CoreFoundation/CoreFoundation.h"
@@ -442,6 +548,7 @@ std::string ApplicationFilePath() {
 
 #if _WIN32
 #include <Shlwapi.h>
+
 #include <filesystem>
 
 char g_exe_path[MAX_PATH];
@@ -485,12 +592,12 @@ bool ConvertToDDS(const char *path) {
     p = p.lexically_normal();
     assert(std::filesystem::exists(p));
     const auto dir = p.parent_path();
-    
+
     std::filesystem::path texconv = ApplicationFilePath();
     texconv = texconv / "texconv.exe";
     texconv = texconv.lexically_normal();
     assert(std::filesystem::exists(texconv));
-    const auto cmd = fmt::format(R"({} -f BC1_UNORM -y -o "{}" "{}")",
+    const auto cmd = fmt::format(R"({} -pow2 -f BC1_UNORM -y -o "{}" "{}")",
                                  texconv.string(), dir.string(), p.string());
     puts(cmd.c_str());
     int ret = system(cmd.c_str());

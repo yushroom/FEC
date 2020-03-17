@@ -13,11 +13,17 @@ struct gpu_statistics {
     uint32_t renderTextureSize;
 };
 
+struct asset_statistics {
+    uint32_t animationClipCount;
+    uint32_t animationClipSize;
+};
+
 struct cpu_statistics {
     uint32_t vertexBufferSize;
     uint32_t indexBufferSize;
     uint32_t textureSize;
     uint32_t ecsSize;
+    uint32_t uploadHeapSize;
 };
 
 struct statistics {

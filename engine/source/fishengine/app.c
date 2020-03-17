@@ -40,49 +40,6 @@
 #define aligned_free free
 #endif
 
-void RenderSystem(World *w) {
-    ComponentArray *a = w->componentArrays + RenderableID;
-    uint32_t size = a->m.size;
-    Renderable *r = a->m.ptr;
-    for (int i = 0; i < size; ++i, ++r) {
-        if (r->mesh && !MeshIsUploaded(r->mesh)) {
-            MeshUploadMeshData(r->mesh);
-        }
-    }
-    r = a->m.ptr;
-    for (int i = 0; i < size; ++i, ++r) {
-        if (r->skin) {
-            RenderableUpdateBones(r, w);
-            GPUSkinning(r);
-        }
-    }
-    r = a->m.ptr;
-    BeginPass();
-    for (int i = 0; i < size; ++i, ++r) {
-        Transform *t =
-            ComponentGetSiblingComponent(w, r, RenderableID, TransformID);
-        SimpleDraw(t, r);
-    }
-}
-
-#define COMP(T)                                                        \
-    {                                                                  \
-        .type = T##ID, .name = #T, .size = sizeof(T), .ctor = T##Init, \
-        .dtor = NULL,                                                  \
-    }
-#define COMP2(T)                                                    \
-    {                                                               \
-        .type = T##ID, .name = #T, .size = sizeof(T), .ctor = NULL, \
-        .dtor = NULL,                                               \
-    }
-
-static ComponentDef g_componentDef[] = {COMP(Transform), COMP(Renderable),
-                                        COMP(Camera),    COMP(Light),
-                                        COMP(Animation), COMP(FreeCamera)};
-
-static ComponentDef g_singleComponentDef[] = {
-    COMP(SingletonTransformManager), COMP(SingletonInput),
-    COMP2(SingletonTime), COMP(SingletonSelection)};
 
 #include <cutils.h>
 #include <quickjs-libc.h>
@@ -291,7 +248,7 @@ static char *js_module_normalize_name(JSContext *ctx, const char *base_name,
 
 const char *ApplicationFilePath();
 
-int app_init() {
+int app_init(World *initWorld) {
     debug_init();
 
     clock_t start, end;
@@ -311,29 +268,13 @@ int app_init() {
     JS_SetModuleLoaderFunc(rt, NULL, js_module_loader, NULL);
 #endif
 
-    WorldDef def;
-    def.componentDefs = g_componentDef;
-    def.componentDefCount = countof(g_componentDef);
-    def.singletonComponentDefs = g_singleComponentDef;
-    def.singletonComponentDefCount = countof(g_singleComponentDef);
-
-    w = WorldCreate(&def);
-    WorldAddSystem(w, AnimationSystem);
-    WorldAddSystem(w, FreeCameraSystem);
-    WorldAddSystem(w, RenderSystem);
-    SingletonTransformManager *tm;
-
+    w = initWorld;
     SetDefaultWorld(w);
     js_init_module_fishengine(ctx, "FishEngine");
     js_init_module_imgui(ctx, "imgui");
 
     int flags = JS_EVAL_TYPE_MODULE;
     eval_file(ctx, path, flags);
-
-    //	TransformPrintHierarchy(t);
-    WorldPrintStats(w);
-
-    //	WorldFree(w);
 
 #ifdef APPLE
     fse_init();
@@ -352,9 +293,6 @@ int app_reload() {
     WorldClear(w);
     // AssetDeleteAll();
 
-    WorldAddSystem(w, AnimationSystem);
-    WorldAddSystem(w, FreeCameraSystem);
-    WorldAddSystem(w, RenderSystem);
     SetDefaultWorld(w);
 
     //	int flags = JS_EVAL_TYPE_MODULE;
@@ -409,18 +347,7 @@ int app_frame_end() {
     InputSystemPostUpdate(w);
 }
 
-void HierarchyWindow(World *w);
-void InspectorWindow(World *w);
-void AssetWindow(World *w);
-void ConsoleWindow();
-void StatisticsWindow(World *w, JSRuntime *rt);
-
 int app_render_ui() {
-    HierarchyWindow(w);
-    InspectorWindow(w);
-    AssetWindow(w);
-    StatisticsWindow(w, rt);
-    ConsoleWindow();
 
     if (1) {
         JSValue global_obj = JS_GetGlobalObject(ctx);

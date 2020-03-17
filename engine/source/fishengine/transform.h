@@ -29,7 +29,8 @@ struct __declspec(align(16)) Transform {
 };
 typedef struct Transform Transform;
 
-static inline void TransformInit(Transform *t) {
+static inline void TransformInit(void *_t) {
+    Transform *t = (Transform *)_t;
     memset(t, 0, sizeof(*t));
     t->localRotation.w = 1.f;
     t->localScale.x = t->localScale.y = t->localScale.z = 1.f;
@@ -60,7 +61,8 @@ struct SingletonTransformManager {
 typedef struct SingletonTransformManager SingletonTransformManager;
 
 static inline void SingletonTransformManagerInit(
-    SingletonTransformManager *tm) {
+    void *_tm) {
+    SingletonTransformManager *tm = (SingletonTransformManager *)_tm;
     memset(tm, 0, sizeof(SingletonTransformManager));
     for (int i = 0; i < countof(tm->LocalToWorld); ++i) {
         tm->LocalToWorld[i] = float4x4_identity();

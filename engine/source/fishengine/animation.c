@@ -132,7 +132,8 @@ AnimationCurve* AnimaitonClipGetCurve(AnimationClip* clip,
     return curves + curveIndex;
 }
 
-void AnimationInit(Animation *a) {
+void AnimationInit(void *_a) {
+    Animation *a = _a;
     a->localTime = 0;
     a->length = 0;
     array_init(&a->clips, sizeof(AnimationClip *), 4);

@@ -16,7 +16,7 @@ struct Light {
 };
 typedef struct Light Light;
 
-void LightInit(Light *light);
+void LightInit(void *light);
 
 #ifdef __cplusplus
 }

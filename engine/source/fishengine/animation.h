@@ -70,7 +70,7 @@ struct Animation {
 };
 typedef struct Animation Animation;
 
-void AnimationInit(Animation *a);
+void AnimationInit(void *a);
 void AnimationAddClip(Animation *animation, AnimationClip *clip);
 void AnimationPlay(World *w, Animation *a);
 

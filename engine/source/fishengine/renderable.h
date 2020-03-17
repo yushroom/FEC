@@ -19,8 +19,8 @@ typedef struct Renderable Renderable;
 extern "C" {
 #endif
 
-static inline void RenderableInit(Renderable *r) {
-    memset(r, 0, sizeof(*r));
+static inline void RenderableInit(void *r) {
+    memset(r, 0, sizeof(Renderable));
     //    r->bones.stride = sizeof(float4x4);
 }
 

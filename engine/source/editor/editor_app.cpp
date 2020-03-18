@@ -22,7 +22,29 @@
 uint32_t selectedEntity = 0;
 static World* world;
 
-void hierarchy_impl(uint32_t id) {
+struct FEImGuiStyle {
+    float mainMenuBarHeight = 20;
+    float toolbarHeight = 40;
+    float hierarchyWidth = 200;
+    float inspectorWidth = 200;
+    float assetHeight = 200;
+};
+struct FEImGuiStyle g_style;
+
+static void MainMenuBar() {
+    if (ImGui::BeginMainMenuBar()) {
+        g_style.mainMenuBarHeight = ImGui::GetWindowHeight();
+        if (ImGui::BeginMenu("File")) {
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit")) {
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+}
+
+static void HierarchyImpl(uint32_t id) {
     if (id == 0) return;
     Transform* t = TransformGet(world, id);
     ImGui::PushID(id);
@@ -43,49 +65,41 @@ void hierarchy_impl(uint32_t id) {
     bool clicked = ImGui::IsItemClicked(0) || ImGui::IsItemFocused();
     if (open) {
         if (!isLeaf) {
-            hierarchy_impl(t->firstChild);
+            HierarchyImpl(t->firstChild);
         }
         ImGui::TreePop();
     }
     ImGui::PopID();
 
-    hierarchy_impl(t->nextSibling);
+    HierarchyImpl(t->nextSibling);
 
     if (clicked) selectedEntity = id;
 }
 
-struct FEImGuiStyle {
-    float toolbarHeight = 40;
-    float hierarchyWidth = 200;
-    float inspectorWidth = 200;
-    float assetHeight = 200;
-};
-struct FEImGuiStyle g_style;
-
-void HierarchyWindow(World* w) {
+static void HierarchyWindow(World* w) {
     world = w;
     SingletonSelection* selection =
         (SingletonSelection*)WorldGetSingletonComponent(w,
             SingletonSelectionID);
     selectedEntity = selection->selectedEntity;
     auto size = ImGui::GetIO().DisplaySize;
-    float height = size.y - g_style.toolbarHeight - g_style.assetHeight;
+    float height = size.y - g_style.mainMenuBarHeight - g_style.toolbarHeight - g_style.assetHeight;
     ImGui::SetNextWindowSize(ImVec2(g_style.hierarchyWidth, height));
-    ImGui::SetNextWindowPos(ImVec2(0, g_style.toolbarHeight));
+    ImGui::SetNextWindowPos(ImVec2(0, g_style.mainMenuBarHeight + g_style.toolbarHeight));
     ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 8);
     ImGui::Begin("Hierarchy");
     for (int i = 1; i < w->componentArrays[TransformID].m.size; ++i) {
-        if (TransformGet(w, i)->parent == 0) hierarchy_impl(i);
+        if (TransformGet(w, i)->parent == 0) HierarchyImpl(i);
     }
     ImGui::End();
     ImGui::PopStyleVar();
     selection->selectedEntity = selectedEntity;
 }
 
-void Toolbar(World* world) {
+void Toolbar() {
     auto size = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowSize(ImVec2(size.x, g_style.toolbarHeight));
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowPos(ImVec2(0, g_style.mainMenuBarHeight));
     const ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoNav |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -160,13 +174,12 @@ void AssetInspectorWindow(World* w, AssetID assetID) {
 }
 
 void InspectorWindow(World* w) {
-    Toolbar(w);
     //    if (selectedEntity >= w->entityCount) return;
     auto size = ImGui::GetIO().DisplaySize;
-    float height = size.y - g_style.toolbarHeight;
+    float height = size.y - g_style.toolbarHeight - g_style.mainMenuBarHeight;
     ImGui::SetNextWindowSize(ImVec2(g_style.inspectorWidth, height));
     ImGui::SetNextWindowPos(
-        ImVec2(size.x - g_style.inspectorWidth, g_style.toolbarHeight));
+        ImVec2(size.x - g_style.inspectorWidth, g_style.toolbarHeight + g_style.mainMenuBarHeight));
     ImGui::Begin("Inspector");
 
     SingletonSelection* selection =
@@ -513,10 +526,39 @@ void ConsoleWindow() {
     ImGui::End();
 }
 
+void SceneView()
+{
+    auto size = ImGui::GetIO().DisplaySize;
+    float x = g_style.hierarchyWidth;
+    float y = g_style.mainMenuBarHeight + g_style.toolbarHeight;
+    float width = size.x - g_style.inspectorWidth - g_style.hierarchyWidth;
+    float height = size.y - y - g_style.assetHeight;
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+    ImGui::SetNextWindowPos(ImVec2(x, y));
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoCollapse;
+
+    ImGui::Begin("Scene View", nullptr, flags);
+
+    ImGui::End();
+}
+
+
 void EditorApp::OnEditorUI() {
+    if (m_ShowProjectSelector) {
+        if (m_ProjectSelector.OnEditorGUI()) {
+            m_ShowProjectSelector = false;
+        }
+        return;
+    }
+    MainMenuBar();
+    Toolbar();
     HierarchyWindow(m_EditorWorld);
     InspectorWindow(m_EditorWorld);
     AssetWindow(m_EditorWorld);
     //StatisticsWindow(m_EditorWorld, rt);
     ConsoleWindow();
+    SceneView();
 }

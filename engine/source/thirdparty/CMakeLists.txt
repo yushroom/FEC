@@ -60,6 +60,19 @@ target_link_libraries(fsevents "-framework CoreFoundation -framework CoreService
 set_target_properties(fsevents PROPERTIES FOLDER "ThirdParty")
 endif ()
 
+if (WIN32)
+set(NATIVE_FILE_DIALOG_ROOT_DIR "nativefiledialog/src")
+add_library(nfd
+    ${NATIVE_FILE_DIALOG_ROOT_DIR}/include/nfd.h
+    ${NATIVE_FILE_DIALOG_ROOT_DIR}/common.h
+    ${NATIVE_FILE_DIALOG_ROOT_DIR}/nfd_win.cpp
+    ${NATIVE_FILE_DIALOG_ROOT_DIR}/nfd_common.c
+    ${NATIVE_FILE_DIALOG_ROOT_DIR}/nfd_common.h
+)
+target_include_directories(nfd PUBLIC ${NATIVE_FILE_DIALOG_ROOT_DIR}/include)
+set_target_properties(nfd PROPERTIES FOLDER "ThirdParty")
+endif ()
+
 #add_subdirectory("./nvidia-texture-tools")
 
 set(MIKKTSPACE_ROOT_DIR "mikktspace")
@@ -96,7 +109,7 @@ add_library(quickjs
 )
 
 target_include_directories(quickjs PUBLIC ${QUICKJS_ROOT_DIR})
-target_compile_definitions(quickjs PUBLIC CONFIG_VERSION="2020-01-19")
+target_compile_definitions(quickjs PUBLIC CONFIG_VERSION="2020-03-16")
 target_compile_definitions(quickjs PUBLIC _GNU_SOURCE)
 target_compile_features(quickjs PUBLIC c_std_11)
 set_target_properties(quickjs PROPERTIES FOLDER "ThirdParty")

@@ -4,10 +4,11 @@ add_executable(FishEditor
 	editor_app.hpp editor_app.cpp
     imgui_extra.hpp imgui_extra.cpp
 	glfw_app.hpp glfw_app.cpp
+	project_selector.hpp project_selector.cpp
 	main.cpp
 )
 
-target_link_libraries(FishEditor PUBLIC FishEngine)
+target_link_libraries(FishEditor PUBLIC FishEngine nfd)
 
 if (APPLE)
     target_link_libraries(FishEditor PUBLIC FishEngine_macos imgui_macos)

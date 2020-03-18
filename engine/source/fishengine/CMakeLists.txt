@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.11.0)
 add_library(FishEngine
     simd_math.h simd_math.c
     array.h array.c
+    fs.hpp fs.cpp
     statistics.h statistics.c
     jsbinding.h jsbinding.c jsbinding.cpp jsbinding.hpp jsbinding.gen.cpp
     debug.h debug.c

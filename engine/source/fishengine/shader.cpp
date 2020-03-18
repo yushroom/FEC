@@ -78,37 +78,12 @@ void ShaderFree(void* s) {
     free(s);
 }
 
+#include "fs.hpp"
 #include <rapidjson/document.h>
 
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <vector>
 namespace fs = std::filesystem;
-
-std::string ReadFileAsString(const std::string& path) {
-    assert(fs::exists(path));
-    std::ifstream f(path);
-    if (f) {
-        std::ostringstream ss;
-        ss << f.rdbuf();
-        return ss.str();
-    }
-    return "";
-}
-
-bool ReadBinaryFile(const std::string& path, std::vector<char>& bin) {
-    assert(fs::exists(path));
-    std::ifstream input(path.c_str(), std::ios::binary);
-    assert(input.is_open());
-    input.seekg(0, std::ios::end);
-    size_t size = input.tellg();
-    input.seekg(0, std::ios::beg);
-    bin.resize(size);
-    input.read(bin.data(), size);
-    input.close();
-    return true;
-}
 
 static void LoadShaderReflectItemFromMemory(Memory json,
                                             ShaderReflectItem& item) {

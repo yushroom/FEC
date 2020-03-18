@@ -31,3 +31,6 @@
 [submodule "engine/source/thirdparty/fmt"]
 	path = engine/source/thirdparty/fmt
 	url = https://github.com/fmtlib/fmt.git
+[submodule "engine/source/thirdparty/nativefiledialog"]
+	path = engine/source/thirdparty/nativefiledialog
+	url = https://github.com/mlabbe/nativefiledialog.git

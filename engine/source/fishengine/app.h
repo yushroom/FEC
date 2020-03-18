@@ -22,9 +22,6 @@ void app_step();
 bool app_is_playing();
 bool app_is_paused();
 
-
-const char *ApplicationFilePath();
-
 #ifdef __cplusplus
 }
 #endif
